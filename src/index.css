@@ -28,6 +28,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -171,4 +172,33 @@ input[type="range"]::-webkit-slider-thumb:hover {
   display: inline-block;
   box-shadow: 0 0 8px #10b981;
   animation: pulse-ring 2s infinite ease-in-out;
+}
+
+/* ========================================================
+   RESPONSIVE DESIGN BREAKPOINTS (MOBILE & TABLET SUPPORT)
+   ======================================================== */
+@media (max-width: 900px) {
+  .app-container {
+    flex-direction: column !important;
+    height: auto !important;
+    overflow-y: auto !important;
+  }
+
+  .preview-wrapper {
+    width: 100% !important;
+    height: 50vh !important;
+    min-height: 340px !important;
+  }
+
+  .control-sidebar {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: auto !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border-color) !important;
+  }
+
+  .top-navbar {
+    padding: 0 14px !important;
+  }
 }
