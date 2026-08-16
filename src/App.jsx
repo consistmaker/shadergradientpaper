@@ -10,7 +10,7 @@ import {
   SHADERGRADIENT_PRESETS,
   PAPER_SHADER_SPECIFIC_PRESETS
 } from './constants';
-import { Sparkles, Layers, Sliders, Smartphone, Monitor, Square, ListPlus, Trash2, Download } from 'lucide-react';
+import { Sparkles, Layers, Sliders, Smartphone, Monitor, Square, ListPlus, Trash2 } from 'lucide-react';
 
 export default function App() {
   const [activeEngine, setActiveEngine] = useState('paper'); // 'paper' | 'shadergradient'
@@ -118,52 +118,51 @@ export default function App() {
   const getAspectStyle = () => {
     switch (aspectRatio) {
       case '9-16':
-        return { width: '360px', height: '640px', maxWidth: '100%', maxHeight: '75vh' }; // 9:16 vertical reels
+        return { width: '320px', height: '568px', maxWidth: '100%', maxHeight: '100%' };
       case '1-1':
-        return { width: '480px', height: '480px', maxWidth: '100%', maxHeight: '75vh' }; // 1:1 square
+        return { width: '340px', height: '340px', maxWidth: '100%', maxHeight: '100%' };
       case '16-9':
       default:
-        return { width: '100%', height: '100%', maxHeight: '100%' }; // 16:9 full canvas
+        return { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' };
     }
   };
 
   return (
     <div className="app-container" style={{ display: 'flex', height: '100vh', width: '100vw', background: 'var(--bg-dark)', color: 'var(--text-main)', overflow: 'hidden' }}>
       
-      {/* Main Preview Area (LEFT on Desktop, TOP on Mobile) */}
-      <div className="preview-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      {/* Main Preview Area (TOP on Mobile, LEFT on Desktop) */}
+      <div className="preview-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '380px', position: 'relative' }}>
         
         {/* Top Navbar */}
         <div className="top-navbar" style={{
-          height: '60px',
+          height: '56px',
           borderBottom: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 20px',
-          background: 'rgba(10, 12, 16, 0.7)',
+          padding: '0 16px',
+          background: 'rgba(10, 12, 16, 0.85)',
           backdropFilter: 'blur(10px)',
           zIndex: 10
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.95rem', fontWeight: '800', letterSpacing: '-0.02em', background: 'linear-gradient(90deg, #6366f1, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: '800', letterSpacing: '-0.02em', background: 'linear-gradient(90deg, #6366f1, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               ANTIGRAVITY 4K
             </span>
-            <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.65rem', padding: '2px 6px' }}>
-              PWA Studio
+            <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.6rem', padding: '2px 5px' }}>
+              PWA
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {/* Quick Add to Queue Button */}
             <button
               className="glass-btn primary"
               onClick={handleAddToQueue}
-              style={{ padding: '6px 10px', fontSize: '0.72rem' }}
+              style={{ padding: '5px 8px', fontSize: '0.7rem' }}
               title="Tambahkan racikan visual saat ini ke antrean render Colab"
             >
-              <ListPlus size={14} /> + Antrean ({renderQueue.length})
+              <ListPlus size={13} /> + Antrean ({renderQueue.length})
             </button>
 
             {/* Aspect Ratio Switcher */}
@@ -171,39 +170,41 @@ export default function App() {
               <button
                 className={`glass-btn ${aspectRatio === '16-9' ? 'active' : ''}`}
                 onClick={() => setAspectRatio('16-9')}
-                style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                style={{ padding: '4px 6px', fontSize: '0.65rem' }}
                 title="16:9 Landscape"
               >
-                <Monitor size={12} /> 16:9
+                <Monitor size={11} /> 16:9
               </button>
               <button
                 className={`glass-btn ${aspectRatio === '9-16' ? 'active' : ''}`}
                 onClick={() => setAspectRatio('9-16')}
-                style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                style={{ padding: '4px 6px', fontSize: '0.65rem' }}
                 title="9:16 Reels/TikTok"
               >
-                <Smartphone size={12} /> 9:16
+                <Smartphone size={11} /> 9:16
               </button>
               <button
                 className={`glass-btn ${aspectRatio === '1-1' ? 'active' : ''}`}
                 onClick={() => setAspectRatio('1-1')}
-                style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                style={{ padding: '4px 6px', fontSize: '0.65rem' }}
                 title="1:1 Square"
               >
-                <Square size={12} /> 1:1
+                <Square size={11} /> 1:1
               </button>
             </div>
           </div>
         </div>
 
         {/* Viewport Canvas Container */}
-        <div style={{
+        <div className="canvas-viewport" style={{
           flex: 1,
+          width: '100%',
+          height: '100%',
+          minHeight: '320px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '16px',
-          background: '#05070a',
+          padding: '12px',
           position: 'relative',
           overflow: 'hidden'
         }}>
@@ -214,7 +215,8 @@ export default function App() {
             overflow: 'hidden',
             boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
             border: '1px solid var(--border-color)',
-            position: 'relative'
+            position: 'relative',
+            display: 'flex'
           }}>
             {activeEngine === 'paper' ? (
               <PaperShaderPreview config={paperConfig} />
@@ -226,7 +228,7 @@ export default function App() {
 
       </div>
 
-      {/* Sidebar Controls (RIGHT on Desktop, BOTTOM on Mobile) */}
+      {/* Sidebar Controls (BOTTOM on Mobile, RIGHT on Desktop) */}
       <div className="control-sidebar" style={{ width: '420px', minWidth: '360px', height: '100%', borderLeft: '1px solid var(--border-color)', zIndex: 20 }}>
         <ControlPanel
           activeEngine={activeEngine}

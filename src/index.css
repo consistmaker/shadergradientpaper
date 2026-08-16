@@ -180,14 +180,22 @@ input[type="range"]::-webkit-slider-thumb:hover {
 @media (max-width: 900px) {
   .app-container {
     flex-direction: column !important;
-    height: auto !important;
+    height: 100vh !important;
     overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   .preview-wrapper {
     width: 100% !important;
-    height: 50vh !important;
-    min-height: 340px !important;
+    height: 380px !important;
+    min-height: 380px !important;
+    flex: none !important;
+  }
+
+  .canvas-viewport {
+    height: calc(380px - 56px) !important;
+    min-height: auto !important;
+    padding: 8px !important;
   }
 
   .control-sidebar {
@@ -196,9 +204,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
     height: auto !important;
     border-left: none !important;
     border-top: 1px solid var(--border-color) !important;
+    flex: 1 !important;
   }
 
   .top-navbar {
-    padding: 0 14px !important;
+    padding: 0 10px !important;
   }
 }
