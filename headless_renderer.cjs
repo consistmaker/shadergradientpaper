@@ -38,6 +38,7 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
+    // Launch Chrome with FORCED HARDWARE GPU (EGL / Nvidia T4)
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -48,6 +49,10 @@ server.listen(4173, '127.0.0.1', async () => {
         '--enable-webgl',
         '--enable-webgl2',
         '--ignore-gpu-blocklist',
+        '--enable-gpu-rasterization',
+        '--enable-zero-copy',
+        '--use-gl=angle',
+        '--use-angle=gl-egl',
         '--window-size=3840,2160'
       ]
     });
@@ -63,10 +68,26 @@ server.listen(4173, '127.0.0.1', async () => {
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
 
+    // Cek apakah encoder hardware GPU Nvidia NVENC (h264_nvenc) tersedia di Colab
+    let videoCodec = 'libx264';
+    let extraEncoderArgs = ['-preset', 'ultrafast'];
+
+    try {
+      const checkNvenc = spawn('ffmpeg', ['-encoders']);
+      let encodersOut = '';
+      checkNvenc.stdout.on('data', d => encodersOut += d.toString());
+      await new Promise(r => checkNvenc.on('close', r));
+      if (encodersOut.includes('h264_nvenc')) {
+        videoCodec = 'h264_nvenc';
+        extraEncoderArgs = ['-preset', 'p4', '-tune', 'hq'];
+        console.log('⚡ GPU Hardware Acceleration: NVIDIA NVENC Hardware Video Encoder ACTIVE!');
+      }
+    } catch (e) {}
+
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering 4K Video: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Hardware GPU Render 4K: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -91,27 +112,26 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Encode raw RGB24 stream directly with FFmpeg (super kencang & 0% pipe overflow)
-      const ffmpeg = spawn('ffmpeg', [
+      // Inisialisasi FFmpeg dengan GPU Nvidia NVENC / CPU Fallback
+      const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
         '-r', String(fps),
         '-i', '-',
-        '-c:v', 'libx264',
+        '-c:v', videoCodec,
         '-pix_fmt', 'yuv420p',
-        '-crf', '16',
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
-        '-preset', 'ultrafast',
-        '-threads', '0',
+        ...extraEncoderArgs,
         outputFile
-      ]);
+      ];
 
-      ffmpeg.stderr.on('data', () => {}); // Mencegah stderr buffer memblokir FFmpeg
+      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+      ffmpeg.stderr.on('data', () => {}); // Stderr flusher
 
-      console.log(`   ⚡ Rendering ${totalFrames} frames...`);
+      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames...`);
 
       const frameDeltaMs = 1000 / fps;
 
@@ -141,7 +161,7 @@ server.listen(4173, '127.0.0.1', async () => {
         }
 
         if (f % 30 === 0 || f === totalFrames - 1) {
-          console.log(`      ⚡ Encoding Frame ${f + 1}/${totalFrames}...`);
+          console.log(`      ⚡ GPU Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
 
