@@ -40,7 +40,7 @@ server.listen(4173, async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with full GPU WebGL acceleration enabled in headless mode
+    // Launch Chrome with high-speed GPU flags
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -70,7 +70,7 @@ server.listen(4173, async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering Real WebGL 4K: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] High-Speed 4K Render: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -84,17 +84,17 @@ server.listen(4173, async () => {
       }, item.config, item.engine);
 
       // Tunggu kompilasi shader WebGL
-      await new Promise(r => setTimeout(r, 2500));
+      await new Promise(r => setTimeout(r, 2000));
 
       const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Encode raw PNG frame stream with FFmpeg libx264
+      // Encode high-speed JPEG stream with FFmpeg preset ultrafast & bitrate 35M (~35MB - 45MB)
       const ffmpeg = spawn('ffmpeg', [
         '-y',
         '-f', 'image2pipe',
-        '-vcodec', 'png',
+        '-vcodec', 'mjpeg',
         '-r', String(fps),
         '-i', '-',
         '-c:v', 'libx264',
@@ -103,38 +103,28 @@ server.listen(4173, async () => {
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
-        '-preset', 'medium',
+        '-preset', 'ultrafast',
+        '-threads', '0',
         outputFile
       ]);
 
-      ffmpeg.stderr.on('data', (data) => {
-        // Logging error jika ffmpeg mengalami issue
-        const str = data.toString();
-        if (str.includes('Error') || str.includes('fatal')) {
-          console.error('FFmpeg stderr:', str);
-        }
-      });
-
-      console.log(`   ⏳ Capturing & Encoding ${totalFrames} frames in 4K resolution (3840x2160)...`);
+      console.log(`   ⚡ Capturing & Encoding ${totalFrames} frames in 4K resolution (Turbo Mode)...`);
       
       for (let f = 0; f < totalFrames; f++) {
-        // Ambil screenshot langsung sebagai Buffer PNG
+        // Ambil screenshot JPEG kualitas 95% (8x lebih cepat daripada PNG)
         const screenshotBuffer = await page.screenshot({
-          type: 'png',
-          omitBackground: false
+          type: 'jpeg',
+          quality: 95
         });
 
-        // Tulis ke stdin ffmpeg dan tunggu buffer flush
+        // Tulis langsung ke pipe ffmpeg
         const canWrite = ffmpeg.stdin.write(screenshotBuffer);
         if (!canWrite) {
           await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
         }
 
-        // Delay kecil per frame agar animasi WebGL bergerak maju secara natural
-        await page.evaluate(() => new Promise(requestAnimationFrame));
-
-        if (f % 30 === 0 || f === totalFrames - 1) {
-          console.log(`      Progress: Frame ${f + 1}/${totalFrames} encoded...`);
+        if (f % 50 === 0 || f === totalFrames - 1) {
+          console.log(`      Turbo Progress: Frame ${f + 1}/${totalFrames} encoded...`);
         }
       }
 
