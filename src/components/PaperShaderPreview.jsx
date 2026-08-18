@@ -28,16 +28,16 @@ import {
 
 export default function PaperShaderPreview({ config }) {
   const colorsList = useMemo(() => [
-    config.color1 || '#6366f1',
-    config.color2 || '#8b5cf6',
-    config.color3 || '#d946ef',
-    config.color4 || '#06b6d4'
+    config.color1 || '#e0eaff',
+    config.color2 || '#241d9a',
+    config.color3 || '#f75092',
+    config.color4 || '#9f50d3'
   ], [config.color1, config.color2, config.color3, config.color4]);
 
   const currentSpeed = Number(config.speed) || 1.0;
-  const currentGrain = Number(config.grain) || 0.15;
+  const currentGrain = Number(config.grain) || 0.0;
   const currentDistortion = Number(config.distortion) ?? 0.8;
-  const currentSwirl = Number(config.swirl) ?? 0.5;
+  const currentSwirl = Number(config.swirl) ?? 0.1;
   const currentScale = Number(config.scale) ?? 1.0;
   const currentRotation = Number(config.rotation) ?? 0;
   const currentSoftness = Number(config.softness) ?? 0.8;
@@ -55,16 +55,16 @@ export default function PaperShaderPreview({ config }) {
     const ctx = c.getContext('2d');
     
     const bgGrad = ctx.createLinearGradient(0, 0, 512, 512);
-    bgGrad.addColorStop(0, config.color1 || '#6366f1');
-    bgGrad.addColorStop(0.5, config.color2 || '#8b5cf6');
-    bgGrad.addColorStop(1, config.color3 || '#d946ef');
+    bgGrad.addColorStop(0, config.color1 || '#e0eaff');
+    bgGrad.addColorStop(0.5, config.color2 || '#241d9a');
+    bgGrad.addColorStop(1, config.color3 || '#f75092');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 512, 512);
 
     const radialGrad = ctx.createRadialGradient(256, 256, 20, 256, 256, 220);
     radialGrad.addColorStop(0, '#ffffff');
-    radialGrad.addColorStop(0.4, config.color4 || '#06b6d4');
-    radialGrad.addColorStop(0.8, config.color2 || '#8b5cf6');
+    radialGrad.addColorStop(0.4, config.color4 || '#9f50d3');
+    radialGrad.addColorStop(0.8, config.color2 || '#241d9a');
     radialGrad.addColorStop(1, 'transparent');
     ctx.fillStyle = radialGrad;
     ctx.beginPath();
@@ -87,7 +87,7 @@ export default function PaperShaderPreview({ config }) {
             rotation={currentRotation}
             grainOverlay={currentGrain}
             grainMixer={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -102,7 +102,7 @@ export default function PaperShaderPreview({ config }) {
             scale={currentScale}
             rotation={currentRotation}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -118,7 +118,7 @@ export default function PaperShaderPreview({ config }) {
             fiber={currentDistortion * 0.5}
             crumples={currentSwirl * 0.5}
             contrast={currentSoftness}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -130,7 +130,7 @@ export default function PaperShaderPreview({ config }) {
             scale={currentScale}
             rotation={currentRotation}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -138,46 +138,41 @@ export default function PaperShaderPreview({ config }) {
         return (
           <SmokeRing
             colors={colorsList}
-            colorBack={config.color1 || '#0f172a'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            radius={currentRadius}
             thickness={currentThickness}
-            noiseScale={currentDistortion * 2}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            radius={currentRadius}
+            grainOverlay={currentGrain}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'neuro-noise':
         return (
           <NeuroNoise
-            colorFront={config.color3 || '#38bdf8'}
-            colorMid={config.color2 || '#6366f1'}
-            colorBack={config.color1 || '#0f172a'}
+            colorFront={config.color1 || '#f8fafc'}
+            colorBack={config.color2 || '#0a0c10'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
             brightness={currentIntensity}
-            contrast={currentSoftness}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            grainOverlay={currentGrain}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'god-rays':
         return (
           <GodRays
-            colors={colorsList.slice(0, 5)}
-            colorBack={config.color1 || '#0f172a'}
-            colorBloom={config.color3 || '#38bdf8'}
+            colorBack={config.color1 || '#090a0f'}
+            colorRays={config.color2 || '#6366f1'}
+            colorGlow={config.color3 || '#06b6d4'}
             speed={currentSpeed}
             scale={currentScale}
-            rotation={currentRotation}
             intensity={currentIntensity}
             density={currentDensity}
-            spotty={currentDistortion * 0.5}
-            bloom={currentSoftness}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -188,9 +183,9 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            stepsPerColor={Math.round(currentDensity * 4 + 1)}
-            softness={currentSoftness}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            contrast={currentSoftness}
+            grainOverlay={currentGrain}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -198,11 +193,25 @@ export default function PaperShaderPreview({ config }) {
         return (
           <Metaballs
             colors={colorsList}
-            colorBack={config.color1 || '#0a0c10'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            contrast={currentSoftness}
+            grainOverlay={currentGrain}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+          />
+        );
+
+      case 'water':
+        return (
+          <Water
+            colorBack={config.color1 || '#082f49'}
+            colorCaustics={config.color2 || '#38bdf8'}
+            colorHighlight={config.color3 || '#e0f2fe'}
+            speed={currentSpeed}
+            scale={currentScale}
+            distortion={currentDistortion}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -210,11 +219,12 @@ export default function PaperShaderPreview({ config }) {
         return (
           <Waves
             colorBack={config.color1 || '#0f172a'}
-            colorLines={config.color2 || '#6366f1'}
+            colorWave1={config.color2 || '#6366f1'}
+            colorWave2={config.color3 || '#ec4899'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -225,18 +235,20 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'voronoi':
         return (
           <Voronoi
-            colors={colorsList}
+            colorBack={config.color1 || '#0f172a'}
+            colorCells={config.color2 || '#8b5cf6'}
+            colorBorders={config.color3 || '#06b6d4'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -247,19 +259,18 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'spiral':
         return (
           <Spiral
-            colorBack={config.color1 || '#0f172a'}
-            colorSpiral={config.color2 || '#6366f1'}
+            colors={colorsList}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -270,30 +281,29 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'dithering':
         return (
           <Dithering
-            colorFront={config.color2 || '#6366f1'}
-            colorBack={config.color1 || '#0f172a'}
+            colorFront={config.color1 || '#6366f1'}
+            colorBack={config.color2 || '#090a0f'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'pulsing-border':
         return (
           <PulsingBorder
-            colors={colorsList}
+            colorFront={config.color1 || '#6366f1'}
+            colorBack={config.color2 || '#0f172a'}
             speed={currentSpeed}
-            scale={currentScale}
-            rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -304,37 +314,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
-          />
-        );
-
-      case 'water':
-        return (
-          <Water
-            colorBack={config.color1 || '#0f172a'}
-            colorHighlight={config.color3 || '#38bdf8'}
-            speed={currentSpeed}
-            scale={currentScale}
-            rotation={currentRotation}
-            caustic={currentDistortion}
-            highlights={currentIntensity}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
-          />
-        );
-
-      case 'liquid-metal':
-        return (
-          <LiquidMetal
-            shape="circle"
-            colorBack={config.color1 || '#0f172a'}
-            colorTint={config.color3 || '#38bdf8'}
-            speed={currentSpeed}
-            scale={currentScale}
-            rotation={currentRotation}
-            repetition={Math.round(currentDensity * 8 + 1)}
-            distortion={currentDistortion}
-            contour={currentSoftness}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -342,14 +322,9 @@ export default function PaperShaderPreview({ config }) {
         return (
           <LensDistortion
             image={proceduralInputImage}
-            spread={currentDistortion}
-            dispersion={currentSoftness}
-            lensBulge={currentSwirl - 0.5}
             speed={currentSpeed}
-            scale={currentScale}
-            rotation={currentRotation}
-            grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            distortion={currentDistortion}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -357,28 +332,31 @@ export default function PaperShaderPreview({ config }) {
         return (
           <Heatmap
             image={proceduralInputImage}
-            colors={colorsList}
-            colorBack={config.color1 || '#0a0c10'}
             speed={currentSpeed}
-            scale={currentScale}
-            rotation={currentRotation}
-            contour={currentDistortion}
-            innerGlow={currentRadius}
-            outerGlow={currentThickness}
-            noise={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+          />
+        );
+
+      case 'liquid-metal':
+        return (
+          <LiquidMetal
+            colorBack={config.color1 || '#0f172a'}
+            colorLiquid={config.color2 || '#6366f1'}
+            shape="circle"
+            speed={currentSpeed}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
       case 'dot-orbit':
         return (
           <DotOrbit
-            colors={colorsList}
             colorBack={config.color1 || '#0f172a'}
+            colorDots={config.color2 || '#38bdf8'}
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -390,7 +368,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
 
@@ -400,7 +378,7 @@ export default function PaperShaderPreview({ config }) {
             colors={colorsList}
             speed={currentSpeed}
             distortion={currentDistortion}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
           />
         );
     }
@@ -408,20 +386,10 @@ export default function PaperShaderPreview({ config }) {
 
   return (
     <div
-      key={config.shaderType}
+      key={`${config.shaderType}_${config.color1}_${config.color2}`}
       style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', borderRadius: 'inherit' }}
     >
       {renderShader()}
-
-      {/* Badge Indicator */}
-      <div style={{ position: 'absolute', bottom: '16px', left: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
-        <span className="badge badge-engine">Paper Shaders ({config.shaderType})</span>
-        {config.isSeamlessLoop && (
-          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
-            Seamless Loop ({config.loopDuration}s)
-          </span>
-        )}
-      </div>
     </div>
   );
 }
