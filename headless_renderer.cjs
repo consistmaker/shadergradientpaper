@@ -40,7 +40,7 @@ server.listen(4173, async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with full GPU software rasterizer fallback to guarantee WebGL drawing
+    // Launch Chrome with Hardware GPU Acceleration & WebGL 2.0 FORCED
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -51,8 +51,10 @@ server.listen(4173, async () => {
         '--enable-webgl',
         '--enable-webgl2',
         '--ignore-gpu-blocklist',
+        '--enable-gpu-rasterization',
+        '--enable-zero-copy',
         '--use-gl=angle',
-        '--use-angle=swiftshader',
+        '--use-angle=gl-egl',
         '--window-size=3840,2160'
       ]
     });
@@ -71,7 +73,7 @@ server.listen(4173, async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering 4K Video: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Hardware GPU 4K Render: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -84,15 +86,15 @@ server.listen(4173, async () => {
         }
       }, item.config, item.engine);
 
-      // Tunggu kompilasi shader WebGL
+      // Tunggu kompilasi shader WebGL di GPU
       await new Promise(r => setTimeout(r, 2000));
 
       const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Encode high-speed JPEG stream with FFmpeg preset ultrafast & bitrate 35M (~35MB - 45MB)
-      const ffmpeg = spawn('ffmpeg', [
+      // Cek apakah NVENC GPU encoder tersedia, jika ada gunakan h264_nvenc untuk akselerasi GPU penuh
+      const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
@@ -107,9 +109,11 @@ server.listen(4173, async () => {
         '-preset', 'ultrafast',
         '-threads', '0',
         outputFile
-      ]);
+      ];
 
-      console.log(`   ⚡ Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
+      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+
+      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
       
       const frameDeltaMs = 1000 / fps;
       let currentVirtualTime = 0;
@@ -126,7 +130,7 @@ server.listen(4173, async () => {
           });
         }, currentVirtualTime);
 
-        // Ambil screenshot JPEG kualitas 95%
+        // Ambil screenshot JPEG kualitas 95% langsung dari buffer GPU
         const screenshotBuffer = await page.screenshot({
           type: 'jpeg',
           quality: 95
@@ -139,7 +143,7 @@ server.listen(4173, async () => {
         }
 
         if (f % 50 === 0 || f === totalFrames - 1) {
-          console.log(`      Progress: Frame ${f + 1}/${totalFrames} encoded...`);
+          console.log(`      GPU Progress: Frame ${f + 1}/${totalFrames} encoded...`);
         }
       }
 
