@@ -68,11 +68,12 @@ server.listen(4173, async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering Real WebGL 4K: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering Real WebGL 4K (Clean Mode): ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
-      await page.goto('http://localhost:4173/', { waitUntil: 'networkidle0' });
+      // Buka halaman dalam mode clean render (?render=clean) murni kanvas
+      await page.goto('http://localhost:4173/?render=clean', { waitUntil: 'networkidle0' });
 
       // Injeksi konfigurasi shader ke canvas WebGL
       await page.evaluate((conf, eng) => {

@@ -22,6 +22,12 @@ export default function App() {
   // Custom Manual Batch Queue
   const [renderQueue, setRenderQueue] = useState([]);
 
+  // Cek apakah halaman dibuka dalam Clean Render Mode (?render=clean)
+  const isCleanRenderMode = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('render') === 'clean' ||
+    window.__IS_CLEAN_RENDER === true
+  );
+
   // Parameter Locks State
   const [lockedParams, setLockedParams] = useState({
     colors: false,
@@ -127,6 +133,19 @@ export default function App() {
       }));
     }
   };
+
+  // JIKA CLEAN RENDER MODE (Khusus untuk Puppeteer Colab 4K Fullscreen Canvas)
+  if (isCleanRenderMode) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', background: '#000' }}>
+        {activeEngine === 'paper' ? (
+          <PaperShaderPreview config={paperConfig} />
+        ) : (
+          <ShaderGradientPreview config={shaderGradientConfig} />
+        )}
+      </div>
+    );
+  }
 
   const getAspectStyle = () => {
     switch (aspectRatio) {
