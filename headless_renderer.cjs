@@ -35,8 +35,13 @@ server.listen(4173, async () => {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    // Auto-detect path Google Chrome
+    const chromePath = fs.existsSync('/usr/bin/google-chrome-stable') 
+      ? '/usr/bin/google-chrome-stable' 
+      : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
+
     const browser = await puppeteer.launch({
-      executablePath: '/usr/bin/chromium-browser',
+      executablePath: chromePath,
       headless: 'new',
       args: [
         '--no-sandbox',
