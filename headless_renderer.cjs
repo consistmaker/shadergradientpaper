@@ -89,6 +89,7 @@ server.listen(4173, async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
+      // Bitrate 35 Mbps target (~40 MB per 10 detik video 4K), standar Adobe Stock & Freepik Premium
       const ffmpeg = spawn('ffmpeg', [
         '-y',
         '-f', 'image2pipe',
@@ -96,9 +97,12 @@ server.listen(4173, async () => {
         '-r', String(fps),
         '-i', '-',
         '-c:v', 'libx264',
+        '-crf', '14',
+        '-b:v', '35M',
+        '-maxrate', '45M',
+        '-bufsize', '70M',
         '-pix_fmt', 'yuv420p',
-        '-b:v', '45M',
-        '-preset', 'fast',
+        '-preset', 'medium',
         outputFile
       ]);
 
@@ -114,7 +118,10 @@ server.listen(4173, async () => {
       ffmpeg.stdin.end();
       await new Promise((resolve) => ffmpeg.on('close', resolve));
       await page.close();
-      console.log(`   ✅ Success 4K Render: ${outputFile}`);
+      
+      const stats = fs.statSync(outputFile);
+      const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
+      console.log(`   ✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
     }
 
     await browser.close();
