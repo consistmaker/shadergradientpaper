@@ -35,12 +35,11 @@ server.listen(4173, async () => {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Auto-detect path Google Chrome
     const chromePath = fs.existsSync('/usr/bin/google-chrome-stable') 
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with Hardware GPU Acceleration & WebGL 2.0 FORCED
+    // Launch Chrome with high-performance WebGL settings
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -51,10 +50,6 @@ server.listen(4173, async () => {
         '--enable-webgl',
         '--enable-webgl2',
         '--ignore-gpu-blocklist',
-        '--enable-gpu-rasterization',
-        '--enable-zero-copy',
-        '--use-gl=angle',
-        '--use-angle=gl-egl',
         '--window-size=3840,2160'
       ]
     });
@@ -73,7 +68,7 @@ server.listen(4173, async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Hardware GPU 4K Render: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] High-Speed Direct Render: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -86,15 +81,15 @@ server.listen(4173, async () => {
         }
       }, item.config, item.engine);
 
-      // Tunggu kompilasi shader WebGL di GPU
+      // Tunggu kompilasi WebGL
       await new Promise(r => setTimeout(r, 2000));
 
       const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Cek apakah NVENC GPU encoder tersedia, jika ada gunakan h264_nvenc untuk akselerasi GPU penuh
-      const ffmpegArgs = [
+      // Inisialisasi High-Speed Hardware FFmpeg Video Pipe
+      const ffmpeg = spawn('ffmpeg', [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
@@ -109,51 +104,49 @@ server.listen(4173, async () => {
         '-preset', 'ultrafast',
         '-threads', '0',
         outputFile
-      ];
+      ]);
 
-      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+      ffmpeg.stdin.on('error', (err) => {
+        console.error('FFmpeg stdin pipe error:', err);
+      });
 
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
-      
+      console.log(`   ⚡ Direct WebGL Canvas Recording (${totalFrames} frames)...`);
+
       const frameDeltaMs = 1000 / fps;
-      let currentVirtualTime = 0;
 
       for (let f = 0; f < totalFrames; f++) {
-        currentVirtualTime += frameDeltaMs;
+        const vTime = f * frameDeltaMs;
 
-        // Paksa paper-shaders dan WebGL merender frame waktu virtual secara presisi
-        await page.evaluate((vTime) => {
+        // Ambil data gambar JPEG langsung dari kanvas WebGL via JavaScript evaluate (NON-BLOCKING & INSTANT!)
+        const base64Data = await page.evaluate((virtualTime) => {
+          // Advance paper shader time
           document.querySelectorAll('[data-paper-shader]').forEach(el => {
             if (el.paperShaderMount && typeof el.paperShaderMount.setFrame === 'function') {
-              el.paperShaderMount.setFrame(vTime);
+              el.paperShaderMount.setFrame(virtualTime);
             }
           });
-        }, currentVirtualTime);
 
-        // Ambil screenshot JPEG kualitas 95% langsung dari buffer GPU
-        const screenshotBuffer = await page.screenshot({
-          type: 'jpeg',
-          quality: 95
-        });
+          const canvas = document.querySelector('canvas');
+          if (canvas) {
+            return canvas.toDataURL('image/jpeg', 0.95);
+          }
+          return null;
+        }, vTime);
 
-        // Tulis langsung ke pipe ffmpeg
-        const canWrite = ffmpeg.stdin.write(screenshotBuffer);
-        if (!canWrite) {
-          await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
+        if (base64Data) {
+          const rawBuffer = Buffer.from(base64Data.split(',')[1], 'base64');
+          ffmpeg.stdin.write(rawBuffer);
         }
 
-        if (f % 50 === 0 || f === totalFrames - 1) {
-          console.log(`      GPU Progress: Frame ${f + 1}/${totalFrames} encoded...`);
+        if (f % 30 === 0 || f === totalFrames - 1) {
+          console.log(`      ⚡ Fast Encoding Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
 
       ffmpeg.stdin.end();
 
-      await new Promise((resolve, reject) => {
-        ffmpeg.on('close', (code) => {
-          if (code === 0) resolve();
-          else reject(new Error(`FFmpeg exited with code ${code}`));
-        });
+      await new Promise((resolve) => {
+        ffmpeg.on('close', resolve);
       });
 
       await page.close();
