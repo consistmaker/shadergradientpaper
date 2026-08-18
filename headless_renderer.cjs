@@ -40,16 +40,18 @@ server.listen(4173, async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
+    // Launch Chrome with full GPU WebGL acceleration enabled in headless mode
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--use-gl=angle',
-        '--use-angle=gl',
+        '--disable-dev-shm-usage',
         '--enable-webgl',
+        '--enable-webgl2',
         '--ignore-gpu-blocklist',
+        '--use-gl=egl',
         '--window-size=3840,2160'
       ]
     });
@@ -68,11 +70,10 @@ server.listen(4173, async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering Real WebGL 4K (Clean Mode): ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering Real WebGL 4K: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
-      // Buka halaman dalam mode clean render (?render=clean) murni kanvas
       await page.goto('http://localhost:4173/?render=clean', { waitUntil: 'networkidle0' });
 
       // Injeksi konfigurasi shader ke canvas WebGL
@@ -83,13 +84,13 @@ server.listen(4173, async () => {
       }, item.config, item.engine);
 
       // Tunggu kompilasi shader WebGL
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2500));
 
       const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Bitrate 35 Mbps target (~40 MB per 10 detik video 4K), standar Adobe Stock & Freepik Premium
+      // Encode raw PNG frame stream with FFmpeg libx264
       const ffmpeg = spawn('ffmpeg', [
         '-y',
         '-f', 'image2pipe',
@@ -97,26 +98,55 @@ server.listen(4173, async () => {
         '-r', String(fps),
         '-i', '-',
         '-c:v', 'libx264',
-        '-crf', '14',
+        '-pix_fmt', 'yuv420p',
+        '-crf', '16',
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
-        '-pix_fmt', 'yuv420p',
         '-preset', 'medium',
         outputFile
       ]);
 
-      console.log(`   ⏳ Capturing ${totalFrames} frames in 4K resolution (3840x2160)...`);
+      ffmpeg.stderr.on('data', (data) => {
+        // Logging error jika ffmpeg mengalami issue
+        const str = data.toString();
+        if (str.includes('Error') || str.includes('fatal')) {
+          console.error('FFmpeg stderr:', str);
+        }
+      });
+
+      console.log(`   ⏳ Capturing & Encoding ${totalFrames} frames in 4K resolution (3840x2160)...`);
+      
       for (let f = 0; f < totalFrames; f++) {
-        const screenshot = await page.screenshot({ type: 'png' });
-        ffmpeg.stdin.write(screenshot);
-        if (f % 30 === 0) {
-          console.log(`      Progress: Frame ${f}/${totalFrames} encoded...`);
+        // Ambil screenshot langsung sebagai Buffer PNG
+        const screenshotBuffer = await page.screenshot({
+          type: 'png',
+          omitBackground: false
+        });
+
+        // Tulis ke stdin ffmpeg dan tunggu buffer flush
+        const canWrite = ffmpeg.stdin.write(screenshotBuffer);
+        if (!canWrite) {
+          await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
+        }
+
+        // Delay kecil per frame agar animasi WebGL bergerak maju secara natural
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+
+        if (f % 30 === 0 || f === totalFrames - 1) {
+          console.log(`      Progress: Frame ${f + 1}/${totalFrames} encoded...`);
         }
       }
 
       ffmpeg.stdin.end();
-      await new Promise((resolve) => ffmpeg.on('close', resolve));
+
+      await new Promise((resolve, reject) => {
+        ffmpeg.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg exited with code ${code}`));
+        });
+      });
+
       await page.close();
       
       const stats = fs.statSync(outputFile);
