@@ -24,8 +24,8 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(filePath).pipe(res);
 });
 
-server.listen(4173, async () => {
-  console.log('📡 Local Headless WebGL Server live on port 4173');
+server.listen(4173, '127.0.0.1', async () => {
+  console.log('📡 Local Headless WebGL Server live on 127.0.0.1:4173');
   
   try {
     const recipeRaw = fs.readFileSync('/content/render_recipe.json', 'utf8');
@@ -39,7 +39,7 @@ server.listen(4173, async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with high-performance WebGL settings
+    // Launch Chrome with reliable non-blocking settings
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -72,7 +72,15 @@ server.listen(4173, async () => {
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
-      await page.goto('http://localhost:4173/?render=clean', { waitUntil: 'networkidle0' });
+      
+      // Gunakan domcontentloaded dan timeout 60 detik agar tidak pernah timeout
+      await page.goto('http://127.0.0.1:4173/?render=clean', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 60000 
+      });
+
+      // Tunggu hingga elemen canvas WebGL siap di DOM
+      await page.waitForSelector('canvas', { timeout: 15000 }).catch(() => {});
 
       // Injeksi konfigurasi shader ke canvas WebGL
       await page.evaluate((conf, eng) => {
@@ -138,7 +146,7 @@ server.listen(4173, async () => {
           ffmpeg.stdin.write(rawBuffer);
         }
 
-        if (f % 30 === 0 || f === totalFrames - 1) {
+        if (f % 50 === 0 || f === totalFrames - 1) {
           console.log(`      ⚡ Fast Encoding Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
