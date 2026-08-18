@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ControlPanel from './components/ControlPanel';
 import ShaderGradientPreview from './components/ShaderGradientPreview';
 import PaperShaderPreview from './components/PaperShaderPreview';
@@ -40,6 +40,19 @@ export default function App() {
       uStrength: { min: 0.3, max: 3.5 }
     }
   });
+
+  // Global Hook untuk Puppeteer Headless WebGL di Google Colab
+  useEffect(() => {
+    window.__SET_ENGINE_RENDER = (engine, config) => {
+      if (engine === 'paper') {
+        setActiveEngine('paper');
+        setPaperConfig(prev => ({ ...prev, ...config }));
+      } else if (engine === 'shadergradient') {
+        setActiveEngine('shadergradient');
+        setShaderGradientConfig(prev => ({ ...prev, ...config }));
+      }
+    };
+  }, []);
 
   const activeConfig = activeEngine === 'paper' ? paperConfig : shaderGradientConfig;
   const setConfig = activeEngine === 'paper' ? setPaperConfig : setShaderGradientConfig;
