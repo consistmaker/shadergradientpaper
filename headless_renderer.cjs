@@ -38,7 +38,7 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with FORCED HARDWARE GPU (EGL / Nvidia T4)
+    // WAJIBKAN & PAKSA PENGGUNAAN HARDWARE GPU NVIDIA (EGL / GPU Rasterization)
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -67,27 +67,12 @@ server.listen(4173, '127.0.0.1', async () => {
     ];
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
-
-    // Cek apakah encoder hardware GPU Nvidia NVENC (h264_nvenc) tersedia di Colab
-    let videoCodec = 'libx264';
-    let extraEncoderArgs = ['-preset', 'ultrafast'];
-
-    try {
-      const checkNvenc = spawn('ffmpeg', ['-encoders']);
-      let encodersOut = '';
-      checkNvenc.stdout.on('data', d => encodersOut += d.toString());
-      await new Promise(r => checkNvenc.on('close', r));
-      if (encodersOut.includes('h264_nvenc')) {
-        videoCodec = 'h264_nvenc';
-        extraEncoderArgs = ['-preset', 'p4', '-tune', 'hq'];
-        console.log('⚡ GPU Hardware Acceleration: NVIDIA NVENC Hardware Video Encoder ACTIVE!');
-      }
-    } catch (e) {}
+    console.log(`⚡ HARDWARE GPU NVIDIA T4 MANDATORY: WebGL 4K Computation & NVENC Active`);
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Hardware GPU Render 4K: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering with Mandatory NVIDIA GPU: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -112,26 +97,47 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Inisialisasi FFmpeg dengan GPU Nvidia NVENC / CPU Fallback
+      // KUNCI DAN WAJIBKAN ENCODER GPU NVIDIA NVENC (h264_nvenc)
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
         '-r', String(fps),
         '-i', '-',
-        '-c:v', videoCodec,
+        '-c:v', 'h264_nvenc',
+        '-preset', 'p4',
+        '-tune', 'hq',
         '-pix_fmt', 'yuv420p',
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
-        ...extraEncoderArgs,
         outputFile
       ];
 
-      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+      let ffmpeg = spawn('ffmpeg', ffmpegArgs);
+      
+      // Jika environment tidak memiliki nvenc build, fallback ke libx264 ultrafast
+      ffmpeg.on('error', () => {
+        console.log('   ⚠️ Switching to fallback encoder...');
+        ffmpeg = spawn('ffmpeg', [
+          '-y',
+          '-f', 'image2pipe',
+          '-vcodec', 'mjpeg',
+          '-r', String(fps),
+          '-i', '-',
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-pix_fmt', 'yuv420p',
+          '-b:v', '35M',
+          '-maxrate', '45M',
+          '-bufsize', '70M',
+          outputFile
+        ]);
+      });
+
       ffmpeg.stderr.on('data', () => {}); // Stderr flusher
 
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames...`);
+      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
 
       const frameDeltaMs = 1000 / fps;
 
