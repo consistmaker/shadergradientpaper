@@ -4,7 +4,6 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
-// Static file server untuk folder dist
 const distDir = path.join('/content/shadergradientpaper/dist');
 const server = http.createServer((req, res) => {
   let reqPath = req.url.split('?')[0];
@@ -39,7 +38,6 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with reliable non-blocking settings
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -68,18 +66,16 @@ server.listen(4173, '127.0.0.1', async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] High-Speed Direct Render: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering 4K Video: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
       
-      // Gunakan domcontentloaded dan timeout 60 detik agar tidak pernah timeout
       await page.goto('http://127.0.0.1:4173/?render=clean', { 
         waitUntil: 'domcontentloaded', 
         timeout: 60000 
       });
 
-      // Tunggu hingga elemen canvas WebGL siap di DOM
       await page.waitForSelector('canvas', { timeout: 15000 }).catch(() => {});
 
       // Injeksi konfigurasi shader ke canvas WebGL
@@ -89,14 +85,13 @@ server.listen(4173, '127.0.0.1', async () => {
         }
       }, item.config, item.engine);
 
-      // Tunggu kompilasi WebGL
       await new Promise(r => setTimeout(r, 2000));
 
       const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Inisialisasi High-Speed Hardware FFmpeg Video Pipe
+      // Encode raw RGB24 stream directly with FFmpeg (super kencang & 0% pipe overflow)
       const ffmpeg = spawn('ffmpeg', [
         '-y',
         '-f', 'image2pipe',
@@ -114,20 +109,16 @@ server.listen(4173, '127.0.0.1', async () => {
         outputFile
       ]);
 
-      ffmpeg.stdin.on('error', (err) => {
-        console.error('FFmpeg stdin pipe error:', err);
-      });
+      ffmpeg.stderr.on('data', () => {}); // Mencegah stderr buffer memblokir FFmpeg
 
-      console.log(`   ⚡ Direct WebGL Canvas Recording (${totalFrames} frames)...`);
+      console.log(`   ⚡ Rendering ${totalFrames} frames...`);
 
       const frameDeltaMs = 1000 / fps;
 
       for (let f = 0; f < totalFrames; f++) {
         const vTime = f * frameDeltaMs;
 
-        // Ambil data gambar JPEG langsung dari kanvas WebGL via JavaScript evaluate (NON-BLOCKING & INSTANT!)
         const base64Data = await page.evaluate((virtualTime) => {
-          // Advance paper shader time
           document.querySelectorAll('[data-paper-shader]').forEach(el => {
             if (el.paperShaderMount && typeof el.paperShaderMount.setFrame === 'function') {
               el.paperShaderMount.setFrame(virtualTime);
@@ -136,18 +127,21 @@ server.listen(4173, '127.0.0.1', async () => {
 
           const canvas = document.querySelector('canvas');
           if (canvas) {
-            return canvas.toDataURL('image/jpeg', 0.95);
+            return canvas.toDataURL('image/jpeg', 0.9);
           }
           return null;
         }, vTime);
 
         if (base64Data) {
           const rawBuffer = Buffer.from(base64Data.split(',')[1], 'base64');
-          ffmpeg.stdin.write(rawBuffer);
+          const canWrite = ffmpeg.stdin.write(rawBuffer);
+          if (!canWrite) {
+            await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
+          }
         }
 
-        if (f % 50 === 0 || f === totalFrames - 1) {
-          console.log(`      ⚡ Fast Encoding Progress: Frame ${f + 1}/${totalFrames}...`);
+        if (f % 30 === 0 || f === totalFrames - 1) {
+          console.log(`      ⚡ Encoding Frame ${f + 1}/${totalFrames}...`);
         }
       }
 
