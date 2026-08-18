@@ -40,7 +40,7 @@ server.listen(4173, async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with high-speed GPU flags
+    // Launch Chrome with full GPU software rasterizer fallback to guarantee WebGL drawing
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -51,7 +51,8 @@ server.listen(4173, async () => {
         '--enable-webgl',
         '--enable-webgl2',
         '--ignore-gpu-blocklist',
-        '--use-gl=egl',
+        '--use-gl=angle',
+        '--use-angle=swiftshader',
         '--window-size=3840,2160'
       ]
     });
@@ -70,7 +71,7 @@ server.listen(4173, async () => {
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] High-Speed 4K Render: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering 4K Video: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -108,10 +109,24 @@ server.listen(4173, async () => {
         outputFile
       ]);
 
-      console.log(`   ⚡ Capturing & Encoding ${totalFrames} frames in 4K resolution (Turbo Mode)...`);
+      console.log(`   ⚡ Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
       
+      const frameDeltaMs = 1000 / fps;
+      let currentVirtualTime = 0;
+
       for (let f = 0; f < totalFrames; f++) {
-        // Ambil screenshot JPEG kualitas 95% (8x lebih cepat daripada PNG)
+        currentVirtualTime += frameDeltaMs;
+
+        // Paksa paper-shaders dan WebGL merender frame waktu virtual secara presisi
+        await page.evaluate((vTime) => {
+          document.querySelectorAll('[data-paper-shader]').forEach(el => {
+            if (el.paperShaderMount && typeof el.paperShaderMount.setFrame === 'function') {
+              el.paperShaderMount.setFrame(vTime);
+            }
+          });
+        }, currentVirtualTime);
+
+        // Ambil screenshot JPEG kualitas 95%
         const screenshotBuffer = await page.screenshot({
           type: 'jpeg',
           quality: 95
@@ -124,7 +139,7 @@ server.listen(4173, async () => {
         }
 
         if (f % 50 === 0 || f === totalFrames - 1) {
-          console.log(`      Turbo Progress: Frame ${f + 1}/${totalFrames} encoded...`);
+          console.log(`      Progress: Frame ${f + 1}/${totalFrames} encoded...`);
         }
       }
 
