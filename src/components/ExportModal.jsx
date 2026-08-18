@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Trash2 } from 'lucide-react';
+import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2 } from 'lucide-react';
 
 export default function ExportModal({
   isOpen,
@@ -14,13 +14,15 @@ export default function ExportModal({
   onRemoveFromQueue
 }) {
   const [copied, setCopied] = useState(false);
-  const [exportMode, setExportMode] = useState(renderQueue.length > 0 ? 'queue' : 'auto_matrix'); // 'auto_matrix' | 'queue'
+  const [exportTarget, setExportTarget] = useState('local_record'); // 'local_record' | 'colab_batch'
+  const [exportMode, setExportMode] = useState(renderQueue.length > 0 ? 'queue' : 'auto_matrix');
   const [batchCount, setBatchCount] = useState(10);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingProgress, setRecordingProgress] = useState(0);
 
   if (!isOpen) return null;
 
-  // Mode A: Manual Queue List
-  // Mode B: Auto-Generated Matrix based on current config & min/max locks
+  // JSON Recipe Data
   const exportData = {
     metadata: {
       generatedAt: new Date().toISOString(),
@@ -58,7 +60,7 @@ export default function ExportModal({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownload = () => {
+  const handleDownloadJSON = () => {
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -66,6 +68,69 @@ export default function ExportModal({
     a.download = `colab_${exportMode}_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Direct Local WebGL Canvas Auto-Recorder (WebM/MP4 High Quality)
+  const handleStartLocalRecord = async () => {
+    try {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) {
+        alert('Kanvas WebGL tidak ditemukan di layar!');
+        return;
+      }
+
+      setIsRecording(true);
+      setRecordingProgress(0);
+
+      const stream = canvas.captureStream(30);
+      const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
+        ? 'video/mp4;codecs=avc1'
+        : (MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm');
+      
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 35000000 // 35 Mbps High Bitrate (~40MB per 10s)
+      });
+
+      const chunks = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `antigravity_motion_${activeEngine}_${Date.now()}.${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setIsRecording(false);
+        setRecordingProgress(0);
+      };
+
+      mediaRecorder.start();
+
+      // Progress interval for 10 seconds duration
+      const totalSeconds = 10;
+      let elapsed = 0;
+      const interval = setInterval(() => {
+        elapsed += 0.5;
+        const progress = Math.min(Math.round((elapsed / totalSeconds) * 100), 100);
+        setRecordingProgress(progress);
+
+        if (elapsed >= totalSeconds) {
+          clearInterval(interval);
+          mediaRecorder.stop();
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error('Local record error:', err);
+      alert('Gagal merekam lokal: ' + err.message);
+      setIsRecording(false);
+    }
   };
 
   return (
@@ -78,7 +143,7 @@ export default function ExportModal({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '20px'
+      padding: '16px'
     }}>
       <div className="glass-panel" style={{
         width: '100%',
@@ -94,121 +159,139 @@ export default function ExportModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileJson color="var(--primary)" size={26} />
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Google Colab 4K Batch Exporter</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Pilih antara Antrean Manual (Custom Presets) atau Otomatisasi Matriks Acak Colab
+                Pilih antara Auto-Download Langsung ke Local PC/HP atau Batch Cloud Colab
               </p>
             </div>
           </div>
           <button className="glass-btn" onClick={onClose} style={{ padding: '6px' }}><X size={18} /></button>
         </div>
 
-        {/* Mode Selector Tabs: Manual Queue vs Auto-Matrix */}
+        {/* Target Selector: 1. Auto-Download Lokal vs 2. Cloud Colab Batch */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px', background: 'rgba(0,0,0,0.4)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
           <button
-            onClick={() => setExportMode('queue')}
-            className={`glass-btn ${exportMode === 'queue' ? 'active' : ''}`}
+            onClick={() => setExportTarget('local_record')}
+            className={`glass-btn ${exportTarget === 'local_record' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <ListOrdered size={16} /> 1. Antrean Manual Queue ({renderQueue.length})
+            <Cpu size={16} /> 1. Auto-Download Local (Instant)
           </button>
           <button
-            onClick={() => setExportMode('auto_matrix')}
-            className={`glass-btn ${exportMode === 'auto_matrix' ? 'active' : ''}`}
+            onClick={() => setExportTarget('colab_batch')}
+            className={`glass-btn ${exportTarget === 'colab_batch' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <Sparkles size={16} /> 2. Auto-Matrix Randomizer
+            <Cloud size={16} /> 2. Google Colab (Massal 4K)
           </button>
         </div>
 
-        {/* Mode 1: Manual Queue Info & List */}
-        {exportMode === 'queue' && (
-          <div style={{ marginBottom: '12px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#10b981' }}>
-                ✓ {renderQueue.length} Preset Pilihan Anda Telah Disimpan di Antrean:
-              </span>
-              {renderQueue.length > 0 && (
-                <button
-                  onClick={onClearQueue}
-                  style={{ background: 'none', border: 'none', color: '#f87171', fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <Trash2 size={12} /> Hapus Semua
-                </button>
-              )}
+        {/* PILIHAN 1: AUTO DOWNLOAD LOKAL INSTAN */}
+        {exportTarget === 'local_record' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Video color="#10b981" size={24} />
+              <div>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Auto-Download Video Langsung di Browser</h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop (35 Mbps High Bitrate ~35 MB - 45 MB) dan langsung ter-download ke PC/HP Anda tanpa butuh Google Colab.
+                </p>
+              </div>
             </div>
 
-            {renderQueue.length === 0 ? (
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '10px 0' }}>
-                Antrean kosong. Klik tombol hijau <b>"+ Tambah ke Antrean Render"</b> di panel samping untuk memasukkan preset racikan Anda satu per satu.
-              </p>
-            ) : (
-              <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {renderQueue.map((item, idx) => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem' }}>
-                    <span><b>#{idx + 1}</b> {item.name} ({item.timestamp})</span>
-                    <button onClick={() => onRemoveFromQueue(item.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}>✕</button>
-                  </div>
-                ))}
+            {isRecording ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
+                    <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
+                  </span>
+                  <span className="font-mono">10 Detik Seamless Loop</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
+                </div>
               </div>
+            ) : (
+              <button
+                className="glass-btn primary"
+                onClick={handleStartLocalRecord}
+                style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+              >
+                <Download size={18} /> Mulai Auto-Download Video Sekarang (10s Loop)
+              </button>
             )}
           </div>
         )}
 
-        {/* Mode 2: Auto Matrix Count Selector */}
-        {exportMode === 'auto_matrix' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Jumlah Variasi Acak Colab:</span>
-            <select
-              value={batchCount}
-              onChange={(e) => setBatchCount(parseInt(e.target.value))}
-              style={{
-                background: '#0a0c10',
-                color: '#fff',
-                border: '1px solid var(--border-color)',
-                padding: '4px 10px',
-                borderRadius: 'var(--radius-sm)',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value={5}>5 Video (Test Fast)</option>
-              <option value={10}>10 Video (Standar Batch)</option>
-              <option value={25}>25 Video (Medium Batch)</option>
-              <option value={50}>50 Video (Stock Portfolio Mass)</option>
-              <option value={100}>100 Video (Extreme Mass Production)</option>
-            </select>
+        {/* PILIHAN 2: GOOGLE COLAB MASSAL */}
+        {exportTarget === 'colab_batch' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.4)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
+              <button
+                onClick={() => setExportMode('queue')}
+                className={`glass-btn ${exportMode === 'queue' ? 'active' : ''}`}
+                style={{ justifyContent: 'center', gap: '6px', fontSize: '0.75rem' }}
+              >
+                <ListOrdered size={14} /> Antrean Manual Queue ({renderQueue.length})
+              </button>
+              <button
+                onClick={() => setExportMode('auto_matrix')}
+                className={`glass-btn ${exportMode === 'auto_matrix' ? 'active' : ''}`}
+                style={{ justifyContent: 'center', gap: '6px', fontSize: '0.75rem' }}
+              >
+                <Sparkles size={14} /> Auto-Matrix Randomizer
+              </button>
+            </div>
+
+            {exportMode === 'auto_matrix' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Jumlah Variasi Acak:</span>
+                <select
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(parseInt(e.target.value))}
+                  style={{ background: '#0a0c10', color: '#fff', border: '1px solid var(--border-color)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', outline: 'none', fontSize: '0.75rem' }}
+                >
+                  <option value={5}>5 Video</option>
+                  <option value={10}>10 Video</option>
+                  <option value={25}>25 Video</option>
+                  <option value={50}>50 Video</option>
+                  <option value={100}>100 Video</option>
+                </select>
+              </div>
+            )}
+
+            {/* JSON Code Preview */}
+            <pre style={{
+              background: 'rgba(0,0,0,0.7)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px',
+              overflowY: 'auto',
+              maxHeight: '140px',
+              fontSize: '0.72rem',
+              color: '#a7f3d0'
+            }}>
+              <code>{jsonString}</code>
+            </pre>
           </div>
         )}
 
-        {/* JSON Code Preview */}
-        <pre style={{
-          background: 'rgba(0,0,0,0.7)',
-          border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)',
-          padding: '14px',
-          overflowY: 'auto',
-          flex: 1,
-          fontSize: '0.78rem',
-          color: '#a7f3d0'
-        }}>
-          <code>{jsonString}</code>
-        </pre>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-          <span style={{ fontSize: '0.75rem', color: exportMode === 'queue' ? '#10b981' : '#818cf8' }}>
-            {exportMode === 'queue' ? `✓ Siap mengekspor ${renderQueue.length} video pilihan manual` : `✓ Colab akan mengacak ${batchCount} variasi dalam batas aman`}
+        {/* Footer Actions */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+          <span style={{ fontSize: '0.72rem', color: exportTarget === 'local_record' ? '#10b981' : '#818cf8' }}>
+            {exportTarget === 'local_record' ? '✓ Auto-Download lokal siap (Tanpa instalasi)' : `✓ Siap diekspor ke Google Colab`}
           </span>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="glass-btn" onClick={handleDownload}>
-              <Download size={16} /> Download JSON
-            </button>
-            <button className="glass-btn primary" onClick={handleCopy}>
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? 'Tersalin ke Clipboard!' : 'Copy JSON'}
-            </button>
-          </div>
+          {exportTarget === 'colab_batch' && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="glass-btn" onClick={handleDownloadJSON} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
+                <Download size={14} /> Download JSON
+              </button>
+              <button className="glass-btn primary" onClick={handleCopy} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? 'Tersalin!' : 'Copy JSON'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
