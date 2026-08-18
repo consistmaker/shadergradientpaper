@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "targetResolution": "3840x2160 (4K UHD)",
+    "targetFps": 30,
+    "loopDurationSeconds": 10,
+    "isSeamlessLoop": true
+  },
+  "manualQueueList": [
+    {
+      "id": "test_1",
+      "name": "Test Paper MeshGradient",
+      "engine": "paper",
+      "config": {
+        "shaderType": "mesh-gradient",
+        "color1": "#e0eaff",
+        "color2": "#241d9a",
+        "color3": "#f75092",
+        "color4": "#9f50d3",
+        "speed": 1,
+        "distortion": 0.8,
+        "swirl": 0.1
+      }
+    }
+  ]
+}
