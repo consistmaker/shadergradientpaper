@@ -87,7 +87,7 @@ export default function PaperShaderPreview({ config }) {
             rotation={currentRotation}
             grainOverlay={currentGrain}
             grainMixer={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -102,7 +102,7 @@ export default function PaperShaderPreview({ config }) {
             scale={currentScale}
             rotation={currentRotation}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -118,7 +118,7 @@ export default function PaperShaderPreview({ config }) {
             fiber={currentDistortion * 0.5}
             crumples={currentSwirl * 0.5}
             contrast={currentSoftness}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -130,7 +130,7 @@ export default function PaperShaderPreview({ config }) {
             scale={currentScale}
             rotation={currentRotation}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -144,7 +144,7 @@ export default function PaperShaderPreview({ config }) {
             thickness={currentThickness}
             radius={currentRadius}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -158,7 +158,7 @@ export default function PaperShaderPreview({ config }) {
             rotation={currentRotation}
             brightness={currentIntensity}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -172,7 +172,7 @@ export default function PaperShaderPreview({ config }) {
             scale={currentScale}
             intensity={currentIntensity}
             density={currentDensity}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -185,7 +185,7 @@ export default function PaperShaderPreview({ config }) {
             rotation={currentRotation}
             contrast={currentSoftness}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -198,7 +198,7 @@ export default function PaperShaderPreview({ config }) {
             rotation={currentRotation}
             contrast={currentSoftness}
             grainOverlay={currentGrain}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -211,7 +211,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             distortion={currentDistortion}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -224,7 +224,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -235,7 +235,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -248,7 +248,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -259,7 +259,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -270,7 +270,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -281,7 +281,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -293,7 +293,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -303,7 +303,7 @@ export default function PaperShaderPreview({ config }) {
             colorFront={config.color1 || '#6366f1'}
             colorBack={config.color2 || '#0f172a'}
             speed={currentSpeed}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -314,7 +314,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -324,7 +324,7 @@ export default function PaperShaderPreview({ config }) {
             image={proceduralInputImage}
             speed={currentSpeed}
             distortion={currentDistortion}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -333,7 +333,7 @@ export default function PaperShaderPreview({ config }) {
           <Heatmap
             image={proceduralInputImage}
             speed={currentSpeed}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -344,7 +344,7 @@ export default function PaperShaderPreview({ config }) {
             colorLiquid={config.color2 || '#6366f1'}
             shape="circle"
             speed={currentSpeed}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -356,7 +356,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -368,7 +368,7 @@ export default function PaperShaderPreview({ config }) {
             speed={currentSpeed}
             scale={currentScale}
             rotation={currentRotation}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
 
@@ -378,7 +378,7 @@ export default function PaperShaderPreview({ config }) {
             colors={colorsList}
             speed={currentSpeed}
             distortion={currentDistortion}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', position: 'absolute', inset: 0 }}
           />
         );
     }
@@ -386,8 +386,8 @@ export default function PaperShaderPreview({ config }) {
 
   return (
     <div
-      key={`${config.shaderType}_${config.color1}_${config.color2}`}
-      style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', borderRadius: 'inherit' }}
+      key={`${config.shaderType}_${config.color1}_${config.color2}_${config.color3}_${config.color4}`}
+      style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}
     >
       {renderShader()}
     </div>
