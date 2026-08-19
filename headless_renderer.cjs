@@ -48,10 +48,6 @@ server.listen(4173, '127.0.0.1', async () => {
         '--enable-webgl',
         '--enable-webgl2',
         '--ignore-gpu-blocklist',
-        '--enable-gpu-rasterization',
-        '--enable-zero-copy',
-        '--use-gl=angle',
-        '--use-angle=gl-egl',
         '--window-size=3840,2160'
       ]
     });
@@ -66,12 +62,12 @@ server.listen(4173, '127.0.0.1', async () => {
     ];
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
-    console.log(`⚡ SINGLE GPU SEQUENTIAL WORKER (1 Video per waktu)`);
+    console.log(`⚡ GPU WebGL 4K Engine Active (30 FPS 4K UHD)`);
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering with Mandatory NVIDIA GPU: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering 4K Video: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -83,6 +79,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await page.waitForSelector('canvas', { timeout: 15000 }).catch(() => {});
 
+      // Injeksi konfigurasi shader ke canvas WebGL
       await page.evaluate((conf, eng) => {
         if (typeof window.__SET_ENGINE_RENDER === 'function') {
           window.__SET_ENGINE_RENDER(eng, conf);
@@ -95,44 +92,27 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
+      // Konfigurasi FFmpeg libx264 -crf 16 -b:v 35M yang identik dengan local_renderer.cjs (hasil 25 MB)
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
         '-r', String(fps),
         '-i', '-',
-        '-c:v', 'h264_nvenc',
-        '-preset', 'p4',
-        '-tune', 'hq',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
+        '-crf', '16',
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
         outputFile
       ];
 
-      let ffmpeg = spawn('ffmpeg', ffmpegArgs);
-      
-      ffmpeg.on('error', () => {
-        ffmpeg = spawn('ffmpeg', [
-          '-y',
-          '-f', 'image2pipe',
-          '-vcodec', 'mjpeg',
-          '-r', String(fps),
-          '-i', '-',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-pix_fmt', 'yuv420p',
-          '-b:v', '35M',
-          '-maxrate', '45M',
-          '-bufsize', '70M',
-          outputFile
-        ]);
-      });
-
+      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
       ffmpeg.stderr.on('data', () => {});
 
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
+      console.log(`   ⚡ Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
 
       const frameDeltaMs = 1000 / fps;
 
@@ -162,7 +142,7 @@ server.listen(4173, '127.0.0.1', async () => {
         }
 
         if (f % 30 === 0 || f === totalFrames - 1) {
-          console.log(`      ⚡ GPU Progress: Frame ${f + 1}/${totalFrames}...`);
+          console.log(`      Progress: Frame ${f + 1}/${totalFrames} encoded...`);
         }
       }
 
