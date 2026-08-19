@@ -66,12 +66,11 @@ server.listen(4173, '127.0.0.1', async () => {
     ];
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
-    console.log(`⚡ SINGLE GPU SEQUENTIAL WORKER (1 Video per waktu)`);
+    console.log(`⚡ PARALLEL GPU ENGINE: 3 Videos Simultaneously`);
 
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i];
-      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering with Mandatory NVIDIA GPU: ${item.name}...`);
+    async function renderSingleVideo(item, index, total) {
+      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${index + 1}.mp4`);
+      console.log(`\n🎥 [${index + 1}/${total}] Parallel Worker Start: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -132,8 +131,6 @@ server.listen(4173, '127.0.0.1', async () => {
 
       ffmpeg.stderr.on('data', () => {});
 
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
-
       const frameDeltaMs = 1000 / fps;
 
       for (let f = 0; f < totalFrames; f++) {
@@ -161,8 +158,8 @@ server.listen(4173, '127.0.0.1', async () => {
           }
         }
 
-        if (f % 30 === 0 || f === totalFrames - 1) {
-          console.log(`      ⚡ GPU Progress: Frame ${f + 1}/${totalFrames}...`);
+        if (f % 60 === 0 || f === totalFrames - 1) {
+          console.log(`      ⚡ [Video ${index + 1}] Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
 
@@ -177,6 +174,14 @@ server.listen(4173, '127.0.0.1', async () => {
       const stats = fs.statSync(outputFile);
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
       console.log(`   ✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
+    }
+
+    // Eksekusi render 3 video sekaligus secara paralel
+    const CONCURRENCY = 3;
+    for (let i = 0; i < queue.length; i += CONCURRENCY) {
+      const batch = queue.slice(i, i + CONCURRENCY);
+      console.log(`\n🚀 Memulai Batch Paralel [${i + 1} - ${Math.min(i + CONCURRENCY, queue.length)} dari ${queue.length}]...`);
+      await Promise.all(batch.map((item, idx) => renderSingleVideo(item, i + idx, queue.length)));
     }
 
     await browser.close();
