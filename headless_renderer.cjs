@@ -38,7 +38,7 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // WAJIBKAN & PAKSA PENGGUNAAN HARDWARE GPU NVIDIA (EGL / GPU Rasterization)
+    // Launch Chrome with full Nvidia GPU hardware acceleration
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -67,12 +67,12 @@ server.listen(4173, '127.0.0.1', async () => {
     ];
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
-    console.log(`⚡ HARDWARE GPU NVIDIA T4 MANDATORY: WebGL 4K Computation & NVENC Active`);
+    console.log(`⚡ HARDWARE GPU NVIDIA T4 MULTI-WORKER PIPELINE ACTIVE`);
 
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i];
-      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering with Mandatory NVIDIA GPU: ${item.name}...`);
+    // Worker function untuk me-render satu video secara independen
+    async function renderSingleVideo(item, index, total) {
+      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${index + 1}.mp4`);
+      console.log(`\n🎥 [${index + 1}/${total}] Starting Parallel GPU Render: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -84,7 +84,6 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await page.waitForSelector('canvas', { timeout: 15000 }).catch(() => {});
 
-      // Injeksi konfigurasi shader ke canvas WebGL
       await page.evaluate((conf, eng) => {
         if (typeof window.__SET_ENGINE_RENDER === 'function') {
           window.__SET_ENGINE_RENDER(eng, conf);
@@ -97,7 +96,7 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // KUNCI DAN WAJIBKAN ENCODER GPU NVIDIA NVENC (h264_nvenc)
+      // FFmpeg with direct hardware acceleration
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
@@ -116,9 +115,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
       let ffmpeg = spawn('ffmpeg', ffmpegArgs);
       
-      // Jika environment tidak memiliki nvenc build, fallback ke libx264 ultrafast
       ffmpeg.on('error', () => {
-        console.log('   ⚠️ Switching to fallback encoder...');
         ffmpeg = spawn('ffmpeg', [
           '-y',
           '-f', 'image2pipe',
@@ -135,9 +132,7 @@ server.listen(4173, '127.0.0.1', async () => {
         ]);
       });
 
-      ffmpeg.stderr.on('data', () => {}); // Stderr flusher
-
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
+      ffmpeg.stderr.on('data', () => {});
 
       const frameDeltaMs = 1000 / fps;
 
@@ -166,8 +161,8 @@ server.listen(4173, '127.0.0.1', async () => {
           }
         }
 
-        if (f % 30 === 0 || f === totalFrames - 1) {
-          console.log(`      ⚡ GPU Progress: Frame ${f + 1}/${totalFrames}...`);
+        if (f % 60 === 0 || f === totalFrames - 1) {
+          console.log(`      ⚡ [Video ${index + 1}] GPU Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
 
@@ -182,6 +177,14 @@ server.listen(4173, '127.0.0.1', async () => {
       const stats = fs.statSync(outputFile);
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
       console.log(`   ✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
+    }
+
+    // Eksekusi render dengan GPU Concurrency (Paralel 3-4 Video Bersamaan untuk Memaksimalkan VRAM 15GB T4)
+    const CONCURRENCY_LIMIT = 3; // 3 Video 4K Paralel Bersamaan
+    for (let i = 0; i < queue.length; i += CONCURRENCY_LIMIT) {
+      const batch = queue.slice(i, i + CONCURRENCY_LIMIT);
+      console.log(`\n🚀 Memulai Batch Paralel [${i + 1} - ${Math.min(i + CONCURRENCY_LIMIT, queue.length)} dari ${queue.length}] di GPU Nvidia...`);
+      await Promise.all(batch.map((item, idx) => renderSingleVideo(item, i + idx, queue.length)));
     }
 
     await browser.close();

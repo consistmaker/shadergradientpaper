@@ -4,6 +4,15 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
+// Auto-detect path FFmpeg binary bawaan package / sistem
+let ffmpegPath = 'ffmpeg';
+try {
+  const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+  if (ffmpegInstaller && ffmpegInstaller.path) {
+    ffmpegPath = ffmpegInstaller.path;
+  }
+} catch (e) {}
+
 // Path folder dist lokal / Colab
 const distDir = path.join(__dirname, 'dist');
 const server = http.createServer((req, res) => {
@@ -28,14 +37,12 @@ server.listen(4173, '127.0.0.1', async () => {
   console.log('📡 Local Headless WebGL Server live on http://127.0.0.1:4173');
   
   try {
-    // Cari render_recipe.json di folder lokal atau root
     let recipePath = path.join(__dirname, 'render_recipe.json');
     if (!fs.existsSync(recipePath)) {
       recipePath = '/content/render_recipe.json';
     }
 
     if (!fs.existsSync(recipePath)) {
-      // Dummy recipe jika file tidak ada
       const defaultRecipe = {
         metadata: { targetResolution: "3840x2160 (4K UHD)", targetFps: 30, loopDurationSeconds: 10, isSeamlessLoop: true },
         manualQueueList: [{ id: 'test_1', name: 'Test Paper MeshGradient', engine: 'paper', config: { shaderType: 'mesh-gradient', color1: '#e0eaff', color2: '#241d9a', color3: '#f75092', color4: '#9f50d3', speed: 1.0, distortion: 0.8, swirl: 0.1 } }]
@@ -72,6 +79,7 @@ server.listen(4173, '127.0.0.1', async () => {
     }
 
     console.log(`🚀 Using Chrome Path: ${chromePath}`);
+    console.log(`🎬 Using FFmpeg Binary: ${ffmpegPath}`);
 
     const browser = await puppeteer.launch({
       executablePath: chromePath,
@@ -126,7 +134,7 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Inisialisasi FFmpeg
+      // Inisialisasi FFmpeg dengan bundle binary otomatis
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
@@ -143,7 +151,7 @@ server.listen(4173, '127.0.0.1', async () => {
         outputFile
       ];
 
-      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+      const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
       ffmpeg.stderr.on('data', () => {});
 
       console.log(`   ⚡ Capturing & Encoding ${totalFrames} frames...`);
