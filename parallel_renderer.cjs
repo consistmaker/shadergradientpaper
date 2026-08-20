@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
 
 // Server statis lokal untuk mode render
@@ -39,7 +39,24 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome dengan Akselerasi GPU Penuh (1 browser instance yang menampung multiple concurrent workers)
+    // Deteksi apakah h264_nvenc didukung di build ffmpeg Colab saat ini
+    let encoderCodec = 'libx264';
+    let encoderPresetArgs = ['-preset', 'ultrafast'];
+
+    try {
+      const ffmpegHelp = execSync('ffmpeg -encoders 2>&1', { encoding: 'utf8' });
+      if (ffmpegHelp.includes('h264_nvenc')) {
+        encoderCodec = 'h264_nvenc';
+        encoderPresetArgs = ['-preset', 'p4', '-tune', 'hq'];
+        console.log('⚡ GPU Hardware Encoder: NVIDIA NVENC (h264_nvenc) Active!');
+      } else {
+        console.log('⚡ Video Encoder: Multi-threaded libx264 Ultra-Fast Active!');
+      }
+    } catch (e) {
+      console.log('⚡ Video Encoder: Multi-threaded libx264 Ultra-Fast Active!');
+    }
+
+    // Launch Chrome dengan Akselerasi GPU Penuh
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -70,12 +87,12 @@ server.listen(4173, '127.0.0.1', async () => {
     const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
     const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
     const totalFrames = fps * duration;
-    const CONCURRENCY = parseInt(process.env.CONCURRENCY || '3', 10);
+    const CONCURRENCY = parseInt(process.env.CONCURRENCY || '2', 10);
 
     console.log(`\n========================================================================`);
-    console.log(`🚀 MULTI-WORKER GPU PARALLEL RENDER ENGINE`);
+    console.log(`🚀 MULTI-WORKER PARALLEL RENDER ENGINE`);
     console.log(`🎬 Total Videos: ${queue.length} | Concurrency: ${CONCURRENCY} Videos Simultaneously`);
-    console.log(`⚡ Target Specs: TRUE 4K UHD (3840x2160 16:9) @ ${fps} FPS (${duration}s Seamless Loop)`);
+    console.log(`⚡ Target Specs: TRUE 4K UHD (3840x2160) @ ${fps} FPS (${duration}s Seamless Loop)`);
     console.log(`========================================================================\n`);
 
     // Worker Function untuk me-render 1 item video secara paralel
@@ -84,7 +101,6 @@ server.listen(4173, '127.0.0.1', async () => {
       console.log(`▶️ [Worker Started] Video ${videoIdx + 1}/${queue.length}: ${item.name}`);
 
       const page = await browser.newPage();
-      // Kunci resolusi viewport browser tepat di True 4K UHD 3840x2160
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
       
       await page.goto('http://127.0.0.1:4173/?render=clean', { 
@@ -103,7 +119,6 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await new Promise(r => setTimeout(r, 2000));
 
-      // FFmpeg encoder dengan skala paksa True 4K (scale=3840:2160)
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
@@ -111,9 +126,8 @@ server.listen(4173, '127.0.0.1', async () => {
         '-r', String(fps),
         '-i', '-',
         '-vf', 'scale=3840:2160:flags=lanczos',
-        '-c:v', 'h264_nvenc',
-        '-preset', 'p4',
-        '-tune', 'hq',
+        '-c:v', encoderCodec,
+        ...encoderPresetArgs,
         '-pix_fmt', 'yuv420p',
         '-b:v', '35M',
         '-maxrate', '45M',
@@ -121,25 +135,7 @@ server.listen(4173, '127.0.0.1', async () => {
         outputFile
       ];
 
-      let ffmpeg = spawn('ffmpeg', ffmpegArgs);
-      ffmpeg.on('error', () => {
-        ffmpeg = spawn('ffmpeg', [
-          '-y',
-          '-f', 'image2pipe',
-          '-vcodec', 'mjpeg',
-          '-r', String(fps),
-          '-i', '-',
-          '-vf', 'scale=3840:2160:flags=lanczos',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-pix_fmt', 'yuv420p',
-          '-b:v', '35M',
-          '-maxrate', '45M',
-          '-bufsize', '70M',
-          outputFile
-        ]);
-      });
-
+      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
       ffmpeg.stderr.on('data', () => {});
 
       const frameDeltaMs = 1000 / fps;
@@ -172,15 +168,23 @@ server.listen(4173, '127.0.0.1', async () => {
 
       ffmpeg.stdin.end();
 
-      await new Promise((resolve) => {
-        ffmpeg.on('close', resolve);
+      await new Promise((resolve, reject) => {
+        ffmpeg.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg exited with code ${code}`));
+        });
+        ffmpeg.on('error', reject);
       });
 
       await page.close();
       
-      const stats = fs.statSync(outputFile);
-      const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-      console.log(`✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB | Resolution: 3840x2160)`);
+      if (fs.existsSync(outputFile)) {
+        const stats = fs.statSync(outputFile);
+        const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
+        console.log(`✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB | Resolution: 3840x2160)`);
+      } else {
+        console.error(`❌ Output file not found: ${outputFile}`);
+      }
     }
 
     // Parallel Pool Scheduler (Menjalankan N video sekaligus secara paralel)
