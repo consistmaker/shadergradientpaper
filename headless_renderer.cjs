@@ -34,6 +34,14 @@ server.listen(4173, '127.0.0.1', async () => {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    // Resolusi Dinamis: Default ke 1920x1080 (FHD Super Cepat) jika tidak dispesifikasikan 4K
+    const targetWidth = (recipe.metadata && recipe.metadata.resolutionWidth) || 1920;
+    const targetHeight = (recipe.metadata && recipe.metadata.resolutionHeight) || 1080;
+    const isFHD = targetWidth <= 1920;
+    const resolutionName = isFHD ? 'Full HD (1080p)' : '4K UHD (2160p)';
+    const targetBitrate = isFHD ? '20M' : '35M';
+    const maxBitrate = isFHD ? '28M' : '45M';
+
     const chromePath = fs.existsSync('/usr/bin/google-chrome-stable') 
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
@@ -53,7 +61,7 @@ server.listen(4173, '127.0.0.1', async () => {
         '--enable-zero-copy',
         '--use-gl=angle',
         '--use-angle=gl-egl',
-        '--window-size=3840,2160'
+        `--window-size=${targetWidth},${targetHeight}`
       ]
     });
 
@@ -67,15 +75,17 @@ server.listen(4173, '127.0.0.1', async () => {
     ];
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
-    console.log(`⚡ HARDWARE GPU NVIDIA T4 MANDATORY: WebGL 4K Computation & NVENC Active`);
+    console.log(`⚡ Target Resolution: ${resolutionName} (${targetWidth}x${targetHeight})`);
+    console.log(`⚡ HARDWARE GPU NVIDIA T4 MANDATORY: WebGL Computation & NVENC Active`);
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
-      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering with Mandatory NVIDIA GPU: ${item.name}...`);
+      const prefix = isFHD ? 'motion_fhd' : 'motion_4k';
+      const outputFile = path.join(outputDir, `${prefix}_${item.engine || 'paper'}_${i + 1}.mp4`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering ${resolutionName}: ${item.name}...`);
 
       const page = await browser.newPage();
-      await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
+      await page.setViewport({ width: targetWidth, height: targetHeight, deviceScaleFactor: 1 });
       
       await page.goto('http://127.0.0.1:4173/?render=clean', { 
         waitUntil: 'domcontentloaded', 
@@ -108,15 +118,14 @@ server.listen(4173, '127.0.0.1', async () => {
         '-preset', 'p4',
         '-tune', 'hq',
         '-pix_fmt', 'yuv420p',
-        '-b:v', '35M',
-        '-maxrate', '45M',
-        '-bufsize', '70M',
+        '-b:v', targetBitrate,
+        '-maxrate', maxBitrate,
+        '-bufsize', '50M',
         outputFile
       ];
 
       let ffmpeg = spawn('ffmpeg', ffmpegArgs);
       
-      // Jika environment tidak memiliki nvenc build, fallback ke libx264 ultrafast
       ffmpeg.on('error', () => {
         console.log('   ⚠️ Switching to fallback encoder...');
         ffmpeg = spawn('ffmpeg', [
@@ -128,16 +137,16 @@ server.listen(4173, '127.0.0.1', async () => {
           '-c:v', 'libx264',
           '-preset', 'ultrafast',
           '-pix_fmt', 'yuv420p',
-          '-b:v', '35M',
-          '-maxrate', '45M',
-          '-bufsize', '70M',
+          '-b:v', targetBitrate,
+          '-maxrate', maxBitrate,
+          '-bufsize', '50M',
           outputFile
         ]);
       });
 
       ffmpeg.stderr.on('data', () => {}); // Stderr flusher
 
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
+      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in ${resolutionName}...`);
 
       const frameDeltaMs = 1000 / fps;
 
@@ -166,7 +175,7 @@ server.listen(4173, '127.0.0.1', async () => {
           }
         }
 
-        if (f % 30 === 0 || f === totalFrames - 1) {
+        if (f % 50 === 0 || f === totalFrames - 1) {
           console.log(`      ⚡ GPU Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
@@ -181,12 +190,12 @@ server.listen(4173, '127.0.0.1', async () => {
       
       const stats = fs.statSync(outputFile);
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-      console.log(`   ✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
+      console.log(`   ✅ Success ${resolutionName} Render: ${outputFile} (Size: ${sizeInMB} MB)`);
     }
 
     await browser.close();
     server.close();
-    console.log('\n🎉 ALL REAL WEBGL 4K VIDEOS HAVE BEEN RENDERED SUCCESSFULLY!');
+    console.log('\n🎉 ALL REAL WEBGL VIDEOS HAVE BEEN RENDERED SUCCESSFULLY!');
     process.exit(0);
   } catch (err) {
     console.error('❌ Render Error:', err);

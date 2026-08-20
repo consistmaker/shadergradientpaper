@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2, Play } from 'lucide-react';
+import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2, Monitor } from 'lucide-react';
 
 export default function ExportModal({
   isOpen,
@@ -11,28 +11,29 @@ export default function ExportModal({
   lockedParams,
   renderQueue = [],
   onClearQueue,
-  onRemoveFromQueue,
-  onApplyConfig
+  onRemoveFromQueue
 }) {
   const [copied, setCopied] = useState(false);
-  const [exportTarget, setExportTarget] = useState('ui_batch_render'); // 'ui_batch_render' | 'colab_batch'
+  const [exportTarget, setExportTarget] = useState('colab_batch'); // 'colab_batch' | 'local_record'
+  const [targetResolution, setTargetResolution] = useState('1080p'); // '1080p' (FHD - Super Cepat) | '4k' (4K UHD)
   const [exportMode, setExportMode] = useState(renderQueue.length > 0 ? 'queue' : 'auto_matrix');
-  const [batchCount, setBatchCount] = useState(5);
-  
-  // UI Batch Renderer Progress State
-  const [isBatchRendering, setIsBatchRendering] = useState(false);
-  const [currentRenderIdx, setCurrentRenderIdx] = useState(0);
-  const [currentVideoName, setCurrentVideoName] = useState('');
-  const [renderProgress, setRenderProgress] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
+  const [batchCount, setBatchCount] = useState(10);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingProgress, setRecordingProgress] = useState(0);
 
   if (!isOpen) return null;
+
+  const resolutionConfig = targetResolution === '1080p' 
+    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD - Fast Render)", bitrate: "20M" }
+    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD - Ultra Quality)", bitrate: "35M" };
 
   // JSON Recipe Data
   const exportData = {
     metadata: {
       generatedAt: new Date().toISOString(),
-      targetResolution: "3840x2160 (4K UHD)",
+      targetResolution: resolutionConfig.label,
+      resolutionWidth: resolutionConfig.width,
+      resolutionHeight: resolutionConfig.height,
       targetFps: 30,
       loopDurationSeconds: 10,
       isSeamlessLoop: true,
@@ -71,35 +72,37 @@ export default function ExportModal({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `colab_${exportMode}_${Date.now()}.json`;
+    a.download = `recipe_${targetResolution}_${exportMode}_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Helper fungsi untuk merekam 1 kanvas video selama 10 detik penuh dengan bitrate 40 Mbps
-  const recordSingleVideoPromise = (videoName, filePrefix) => {
-    return new Promise((resolve, reject) => {
+  // Direct Local WebGL Canvas Auto-Recorder (WebM/MP4)
+  const handleStartLocalRecord = async () => {
+    try {
       const canvases = Array.from(document.querySelectorAll('canvas'));
       const canvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
 
       if (!canvas) {
-        return reject(new Error('Kanvas WebGL tidak ditemukan di layar!'));
+        alert('Kanvas WebGL tidak ditemukan di layar!');
+        return;
       }
 
-      // Pastikan captureStream 30 FPS eksak
+      setIsRecording(true);
+      setRecordingProgress(0);
+
       const stream = canvas.captureStream ? canvas.captureStream(30) : null;
       if (!stream) {
-        return reject(new Error('Browser tidak mendukung canvas capture stream.'));
+        alert('Browser Anda tidak mendukung direct canvas stream recording.');
+        setIsRecording(false);
+        return;
       }
 
-      let mimeType = 'video/webm;codecs=vp9';
+      let mimeType = 'video/webm;codecs=vp8';
       let ext = 'webm';
 
-      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.640028')) {
-        mimeType = 'video/mp4;codecs=avc1.640028';
-        ext = 'mp4';
-      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
-        mimeType = 'video/mp4';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+        mimeType = 'video/mp4;codecs=avc1';
         ext = 'mp4';
       } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
@@ -109,10 +112,9 @@ export default function ExportModal({
         ext = 'webm';
       }
 
-      // Bitrate 40 Mbps untuk ukuran 35MB - 50MB
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 40000000
+        videoBitsPerSecond: targetResolution === '1080p' ? 20000000 : 35000000
       });
 
       const chunks = [];
@@ -121,31 +123,32 @@ export default function ExportModal({
       };
 
       mediaRecorder.onstop = () => {
-        if (chunks.length > 0) {
-          const blob = new Blob(chunks, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${filePrefix}_${Date.now()}.${ext}`;
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          }, 100);
+        if (chunks.length === 0) {
+          alert('Perekaman selesai tetapi buffer frame kosong.');
+          setIsRecording(false);
+          setRecordingProgress(0);
+          return;
         }
-        resolve();
+
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `motion_${targetResolution}_${activeEngine}_${Date.now()}.${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setIsRecording(false);
+        setRecordingProgress(0);
       };
 
-      mediaRecorder.start(250);
+      mediaRecorder.start(500);
 
-      // Perekaman 10.0 detik eksak (20 interval x 500ms = 10000ms)
       const totalSeconds = 10;
       let elapsed = 0;
       const interval = setInterval(() => {
         elapsed += 0.5;
         const progress = Math.min(Math.round((elapsed / totalSeconds) * 100), 100);
-        setRenderProgress(progress);
+        setRecordingProgress(progress);
 
         if (elapsed >= totalSeconds) {
           clearInterval(interval);
@@ -154,58 +157,11 @@ export default function ExportModal({
           }
         }
       }, 500);
-    });
-  };
 
-  // UI BATCH RENDERER: Merender seluruh antrean video secara berurutan dan auto-download satu per satu
-  const handleStartUIBatchRender = async () => {
-    const listToRender = exportMode === 'queue' && renderQueue.length > 0
-      ? renderQueue
-      : [
-          {
-            name: activeEngine === 'paper' 
-              ? `Paper: ${paperConfig.shaderType} (${paperConfig.color1})`
-              : `ShaderGradient: ${shaderGradientConfig.type} (${shaderGradientConfig.color1})`,
-            engine: activeEngine,
-            config: JSON.parse(JSON.stringify(activeEngine === 'paper' ? paperConfig : shaderGradientConfig))
-          }
-        ];
-
-    setIsBatchRendering(true);
-    setCompletedCount(0);
-
-    try {
-      for (let i = 0; i < listToRender.length; i++) {
-        const item = listToRender[i];
-        setCurrentRenderIdx(i + 1);
-        setCurrentVideoName(item.name || `Video #${i + 1}`);
-        setRenderProgress(0);
-
-        // 1. Ubah kanvas aktif ke konfigurasi video item saat ini
-        if (typeof onApplyConfig === 'function') {
-          onApplyConfig(item.engine || 'paper', item.config);
-        } else if (typeof window.__SET_ENGINE_RENDER === 'function') {
-          window.__SET_ENGINE_RENDER(item.engine || 'paper', item.config);
-        }
-
-        // 2. Tunggu inisialisasi dan kompilasi WebGL shader selama 2.5 detik
-        await new Promise(r => setTimeout(r, 2500));
-
-        // 3. Rekam video selama 10 detik penuh dan auto download
-        await recordSingleVideoPromise(item.name, `motion_${item.engine || 'paper'}_${i + 1}`);
-        setCompletedCount(i + 1);
-
-        // 4. Jeda kecil sebelum beralih ke video berikutnya
-        await new Promise(r => setTimeout(r, 1500));
-      }
-
-      alert(`🎉 SELESAI! Seluruh ${listToRender.length} video antrean telah berhasil dirender 10 detik & ter-download ke komputer Anda.`);
     } catch (err) {
-      console.error('Batch render error:', err);
-      alert('Terjadi kesalahan render: ' + err.message);
-    } finally {
-      setIsBatchRendering(false);
-      setRenderProgress(0);
+      console.error('Local record error:', err);
+      alert('Gagal merekam lokal: ' + err.message);
+      setIsRecording(false);
     }
   };
 
@@ -235,84 +191,65 @@ export default function ExportModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileJson color="var(--primary)" size={26} />
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Direct UI Batch Video Render & Export</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Batch Video Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Render seluruh antrean video langsung di UI atau gunakan GPU Parallel Colab
+                Pilih resolusi dan target render (FHD Super Fast / 4K UHD Ultra Quality)
               </p>
             </div>
           </div>
-          <button className="glass-btn" onClick={onClose} disabled={isBatchRendering} style={{ padding: '6px' }}><X size={18} /></button>
+          <button className="glass-btn" onClick={onClose} style={{ padding: '6px' }}><X size={18} /></button>
         </div>
 
-        {/* Target Selector */}
+        {/* RESOLUTION SELECTOR: FHD 1080p (Fast) vs 4K UHD */}
+        <div style={{ marginBottom: '12px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Monitor size={15} color="var(--primary)" /> Pilihan Resolusi Render:
+            </span>
+            <span style={{ fontSize: '0.7rem', color: targetResolution === '1080p' ? '#10b981' : '#a855f7', fontWeight: '700' }}>
+              {targetResolution === '1080p' ? '⚡ 4x Lebih Cepat (~1 Menit/Video)' : '💎 Kualitas Tertinggi (~5 Menit/Video)'}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <button
+              onClick={() => setTargetResolution('1080p')}
+              className={`glass-btn ${targetResolution === '1080p' ? 'active' : ''}`}
+              style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
+            >
+              <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>Full HD (1080p)</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>1920x1080 (Super Cepat ~1 Min)</span>
+            </button>
+            <button
+              onClick={() => setTargetResolution('4k')}
+              className={`glass-btn ${targetResolution === '4k' ? 'active' : ''}`}
+              style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
+            >
+              <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>4K UHD (2160p)</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>3840x2160 (Ultra Quality ~5 Min)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Target Selector: 1. Cloud Colab Batch vs 2. Auto-Download Lokal */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px', background: 'rgba(0,0,0,0.4)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
-          <button
-            onClick={() => setExportTarget('ui_batch_render')}
-            className={`glass-btn ${exportTarget === 'ui_batch_render' ? 'active' : ''}`}
-            style={{ justifyContent: 'center', gap: '6px' }}
-          >
-            <Play size={16} /> 1. Render BATCH Langsung di UI
-          </button>
           <button
             onClick={() => setExportTarget('colab_batch')}
             className={`glass-btn ${exportTarget === 'colab_batch' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <Cloud size={16} /> 2. GPU Parallel Colab
+            <Cloud size={16} /> 1. Google Colab GPU Batch
+          </button>
+          <button
+            onClick={() => setExportTarget('local_record')}
+            className={`glass-btn ${exportTarget === 'local_record' ? 'active' : ''}`}
+            style={{ justifyContent: 'center', gap: '6px' }}
+          >
+            <Cpu size={16} /> 2. Auto-Download Browser
           </button>
         </div>
 
-        {/* PILIHAN 1: RENDER BATCH LANGSUNG DI UI */}
-        {exportTarget === 'ui_batch_render' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Video color="#10b981" size={24} />
-              <div>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>
-                  Direct UI Batch Renderer (100% Otomatis Berurutan)
-                </h4>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Sistem akan memutar setiap video di antrean satu per satu selama <b>10 detik penuh (Bitrate 40 Mbps ~40MB per video)</b> dan langsung otomatis mendownloadnya ke komputer Anda tanpa error!
-                </p>
-              </div>
-            </div>
-
-            {/* Mode Pemilihan: Manual Queue vs Single */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
-              <span style={{ fontSize: '0.75rem' }}>
-                Total Video di Antrean: <b>{renderQueue.length > 0 ? `${renderQueue.length} Video Terpilih` : '1 Video Aktif'}</b>
-              </span>
-              <span style={{ fontSize: '0.72rem', color: '#10b981' }}>✓ 10 Detik Loop | Bitrate 40 Mbps</span>
-            </div>
-
-            {isBatchRendering ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', background: 'rgba(99,102,241,0.12)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8', fontWeight: '600' }}>
-                    <Loader2 size={16} className="spin" /> Sedang Merender [{currentRenderIdx}/{renderQueue.length || 1}]: {currentVideoName}
-                  </span>
-                  <span className="font-mono">{renderProgress}% (10s Loop)</span>
-                </div>
-                <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.5)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ width: `${renderProgress}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #6366f1)', transition: 'width 0.3s ease' }} />
-                </div>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  Selesai di-download: {completedCount} dari {renderQueue.length || 1} video...
-                </span>
-              </div>
-            ) : (
-              <button
-                className="glass-btn primary"
-                onClick={handleStartUIBatchRender}
-                style={{ justifyContent: 'center', padding: '14px', fontSize: '0.9rem', fontWeight: '700', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}
-              >
-                <Play size={18} /> MULAI RENDER SELURUH BATCH SEKARANG ({renderQueue.length > 0 ? `${renderQueue.length} Video` : '1 Video'})
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* PILIHAN 2: GOOGLE COLAB MASSAL */}
+        {/* PILIHAN 1: GOOGLE COLAB MASSAL */}
         {exportTarget === 'colab_batch' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.4)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
@@ -332,6 +269,23 @@ export default function ExportModal({
               </button>
             </div>
 
+            {exportMode === 'auto_matrix' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Jumlah Variasi Acak:</span>
+                <select
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(parseInt(e.target.value))}
+                  style={{ background: '#0a0c10', color: '#fff', border: '1px solid var(--border-color)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', outline: 'none', fontSize: '0.75rem' }}
+                >
+                  <option value={5}>5 Video</option>
+                  <option value={10}>10 Video</option>
+                  <option value={25}>25 Video</option>
+                  <option value={50}>50 Video</option>
+                  <option value={100}>100 Video</option>
+                </select>
+              </div>
+            )}
+
             {/* JSON Code Preview */}
             <pre style={{
               background: 'rgba(0,0,0,0.7)',
@@ -339,7 +293,7 @@ export default function ExportModal({
               borderRadius: 'var(--radius-md)',
               padding: '10px',
               overflowY: 'auto',
-              maxHeight: '140px',
+              maxHeight: '120px',
               fontSize: '0.72rem',
               color: '#a7f3d0'
             }}>
@@ -348,10 +302,47 @@ export default function ExportModal({
           </div>
         )}
 
+        {/* PILIHAN 2: AUTO DOWNLOAD LOKAL INSTAN */}
+        {exportTarget === 'local_record' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Video color="#10b981" size={24} />
+              <div>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Auto-Download Langsung di Browser</h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop ({resolutionConfig.label}) dan langsung ter-download ke PC/HP Anda.
+                </p>
+              </div>
+            </div>
+
+            {isRecording ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
+                    <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
+                  </span>
+                  <span className="font-mono">10 Detik Loop</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
+                </div>
+              </div>
+            ) : (
+              <button
+                className="glass-btn primary"
+                onClick={handleStartLocalRecord}
+                style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+              >
+                <Download size={18} /> Mulai Download Video {targetResolution.toUpperCase()} (10s Loop)
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
-          <span style={{ fontSize: '0.72rem', color: exportTarget === 'ui_batch_render' ? '#10b981' : '#818cf8' }}>
-            {exportTarget === 'ui_batch_render' ? '✓ Mode Render Batch UI Langsung Aktif' : `✓ Siap diekspor ke GPU Parallel Colab`}
+          <span style={{ fontSize: '0.72rem', color: exportTarget === 'colab_batch' ? '#818cf8' : '#10b981' }}>
+            {exportTarget === 'colab_batch' ? `✓ Resep ${targetResolution.toUpperCase()} siap diekspor ke Colab` : `✓ Siap dirender lokal di browser`}
           </span>
           {exportTarget === 'colab_batch' && (
             <div style={{ display: 'flex', gap: '8px' }}>
