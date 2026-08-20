@@ -129,15 +129,17 @@ export default function ExportModal({
           a.download = `${filePrefix}_${Date.now()}.${ext}`;
           document.body.appendChild(a);
           a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
         }
         resolve();
       };
 
       mediaRecorder.start(250);
 
-      // Perekaman 10.0 detik eksak
+      // Perekaman 10.0 detik eksak (20 interval x 500ms = 10000ms)
       const totalSeconds = 10;
       let elapsed = 0;
       const interval = setInterval(() => {
@@ -161,9 +163,11 @@ export default function ExportModal({
       ? renderQueue
       : [
           {
-            name: `Active Visual Preset`,
+            name: activeEngine === 'paper' 
+              ? `Paper: ${paperConfig.shaderType} (${paperConfig.color1})`
+              : `ShaderGradient: ${shaderGradientConfig.type} (${shaderGradientConfig.color1})`,
             engine: activeEngine,
-            config: activeEngine === 'paper' ? paperConfig : shaderGradientConfig
+            config: JSON.parse(JSON.stringify(activeEngine === 'paper' ? paperConfig : shaderGradientConfig))
           }
         ];
 
@@ -177,25 +181,25 @@ export default function ExportModal({
         setCurrentVideoName(item.name || `Video #${i + 1}`);
         setRenderProgress(0);
 
-        // Ubah kanvas aktif ke konfigurasi video item saat ini
+        // 1. Ubah kanvas aktif ke konfigurasi video item saat ini
         if (typeof onApplyConfig === 'function') {
           onApplyConfig(item.engine || 'paper', item.config);
         } else if (typeof window.__SET_ENGINE_RENDER === 'function') {
           window.__SET_ENGINE_RENDER(item.engine || 'paper', item.config);
         }
 
-        // Tunggu kompilasi shader WebGL selama 2 detik
-        await new Promise(r => setTimeout(r, 2000));
+        // 2. Tunggu inisialisasi dan kompilasi WebGL shader selama 2.5 detik
+        await new Promise(r => setTimeout(r, 2500));
 
-        // Rekam video selama 10 detik penuh dan auto download
+        // 3. Rekam video selama 10 detik penuh dan auto download
         await recordSingleVideoPromise(item.name, `motion_${item.engine || 'paper'}_${i + 1}`);
-        setCompletedCount(prev => prev + 1);
+        setCompletedCount(i + 1);
 
-        // Jeda kecil sebelum video berikutnya
-        await new Promise(r => setTimeout(r, 1000));
+        // 4. Jeda kecil sebelum beralih ke video berikutnya
+        await new Promise(r => setTimeout(r, 1500));
       }
 
-      alert(`🎉 SELESAI! Seluruh ${listToRender.length} video telah berhasil dirender & ter-download ke komputer Anda.`);
+      alert(`🎉 SELESAI! Seluruh ${listToRender.length} video antrean telah berhasil dirender 10 detik & ter-download ke komputer Anda.`);
     } catch (err) {
       console.error('Batch render error:', err);
       alert('Terjadi kesalahan render: ' + err.message);
@@ -276,7 +280,7 @@ export default function ExportModal({
             {/* Mode Pemilihan: Manual Queue vs Single */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
               <span style={{ fontSize: '0.75rem' }}>
-                Total Video di Antrean: <b>{renderQueue.length > 0 ? `${renderQueue.length} Video` : '1 Video Aktif'}</b>
+                Total Video di Antrean: <b>{renderQueue.length > 0 ? `${renderQueue.length} Video Terpilih` : '1 Video Aktif'}</b>
               </span>
               <span style={{ fontSize: '0.72rem', color: '#10b981' }}>✓ 10 Detik Loop | Bitrate 40 Mbps</span>
             </div>

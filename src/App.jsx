@@ -47,70 +47,78 @@ export default function App() {
     }
   });
 
+  // Fungsi untuk mengaplikasikan konfigurasi shader secara langsung (dipanggil saat batch render UI)
+  const handleApplyConfig = (engine, config) => {
+    if (engine === 'paper') {
+      setActiveEngine('paper');
+      setPaperConfig(prev => ({ ...prev, ...config }));
+    } else if (engine === 'shadergradient') {
+      setActiveEngine('shadergradient');
+      setShaderGradientConfig(prev => ({ ...prev, ...config }));
+    }
+  };
+
   // Global Hook untuk Puppeteer Headless WebGL di Google Colab
   useEffect(() => {
     window.__SET_ENGINE_RENDER = (engine, config) => {
-      if (engine === 'paper') {
-        setActiveEngine('paper');
-        setPaperConfig(prev => ({ ...prev, ...config }));
-      } else if (engine === 'shadergradient') {
-        setActiveEngine('shadergradient');
-        setShaderGradientConfig(prev => ({ ...prev, ...config }));
-      }
+      handleApplyConfig(engine, config);
     };
   }, []);
 
   const activeConfig = activeEngine === 'paper' ? paperConfig : shaderGradientConfig;
-  const setConfig = activeEngine === 'paper' ? setPaperConfig : setShaderGradientConfig;
-
-  // Add Current Setting to Manual Batch Queue
-  const handleAddToQueue = () => {
-    const newItem = {
-      id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      engine: activeEngine,
-      timestamp: new Date().toLocaleTimeString(),
-      config: { ...activeConfig },
-      name: activeEngine === 'paper' 
-        ? `Paper: ${activeConfig.shaderType} (${activeConfig.color1 || '#fff'})` 
-        : `3D: ${activeConfig.type || 'sphere'} (${activeConfig.activePresetId || 'custom'})`
-    };
-    setRenderQueue(prev => [newItem, ...prev]);
+  const setConfig = (newConf) => {
+    if (activeEngine === 'paper') {
+      setPaperConfig(newConf);
+    } else {
+      setShaderGradientConfig(newConf);
+    }
   };
 
-  // Remove Item from Queue
+  const handleAddToQueue = () => {
+    const queueItem = {
+      id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      name: activeEngine === 'paper' 
+        ? `Paper: ${paperConfig.shaderType} (${paperConfig.color1})`
+        : `ShaderGradient: ${shaderGradientConfig.type} (${shaderGradientConfig.color1})`,
+      engine: activeEngine,
+      config: JSON.parse(JSON.stringify(activeConfig))
+    };
+    setRenderQueue(prev => [...prev, queueItem]);
+  };
+
   const handleRemoveFromQueue = (id) => {
     setRenderQueue(prev => prev.filter(item => item.id !== id));
   };
 
-  // Clear Entire Queue
   const handleClearQueue = () => {
     setRenderQueue([]);
   };
 
-  // Smart Randomizer based on locks and safe min/max ranges
   const handleRandomize = () => {
     const randomPalette = COLOR_PALETTES[Math.floor(Math.random() * COLOR_PALETTES.length)];
-
+    
     if (activeEngine === 'paper') {
-      const shaderKeys = Object.keys(PAPER_SHADER_SPECIFIC_PRESETS);
-      const randomShader = shaderKeys[Math.floor(Math.random() * shaderKeys.length)];
       const minSpeed = randomRanges.paper.speed.min;
       const maxSpeed = randomRanges.paper.speed.max;
       const minGrain = randomRanges.paper.grain.min;
       const maxGrain = randomRanges.paper.grain.max;
+      
+      const specificPresets = PAPER_SHADER_SPECIFIC_PRESETS[paperConfig.shaderType] || [];
+      const randomPreset = specificPresets.length > 0
+        ? specificPresets[Math.floor(Math.random() * specificPresets.length)]
+        : null;
 
       setPaperConfig(prev => ({
         ...prev,
-        shaderType: lockedParams.geometry ? prev.shaderType : randomShader,
-        color1: lockedParams.colors ? prev.color1 : randomPalette.colors[0],
-        color2: lockedParams.colors ? prev.color2 : randomPalette.colors[1],
-        color3: lockedParams.colors ? prev.color3 : randomPalette.colors[2],
-        color4: lockedParams.colors ? prev.color4 : (randomPalette.colors[3] || randomPalette.colors[0]),
-        speed: lockedParams.speed ? prev.speed : Number((Math.random() * (maxSpeed - minSpeed) + minSpeed).toFixed(1)),
+        color1: lockedParams.colors ? prev.color1 : (randomPreset ? randomPreset.colors[0] : randomPalette.colors[0]),
+        color2: lockedParams.colors ? prev.color2 : (randomPreset ? randomPreset.colors[1] : randomPalette.colors[1]),
+        color3: lockedParams.colors ? prev.color3 : (randomPreset ? randomPreset.colors[2] : randomPalette.colors[2]),
+        color4: lockedParams.colors ? prev.color4 : (randomPreset ? randomPreset.colors[3] : randomPalette.colors[3]),
+        speed: lockedParams.speed ? prev.speed : Number((Math.random() * (maxSpeed - minSpeed) + minSpeed).toFixed(2)),
         grain: Number((Math.random() * (maxGrain - minGrain) + minGrain).toFixed(2)),
-        distortion: Number((Math.random() * 0.7 + 0.3).toFixed(2)),
-        swirl: Number((Math.random() * 0.8 + 0.1).toFixed(2)),
-        scale: Number((Math.random() * 0.8 + 0.7).toFixed(1))
+        distortion: Number((Math.random() * 1.5 + 0.2).toFixed(2)),
+        swirl: Number((Math.random() * 1.0 + 0.1).toFixed(2)),
+        rotation: Math.floor(Math.random() * 360)
       }));
     } else {
       const minSpeed = randomRanges.shadergradient.uSpeed.min;
@@ -150,93 +158,89 @@ export default function App() {
   const getAspectStyle = () => {
     switch (aspectRatio) {
       case '9-16':
-        return { width: '320px', height: '568px', maxWidth: '100%', maxHeight: '100%' };
+        return { width: 'min(100%, 450px)', aspectRatio: '9/16', maxHeight: '85vh' };
       case '1-1':
-        return { width: '340px', height: '340px', maxWidth: '100%', maxHeight: '100%' };
+        return { width: 'min(100%, 650px)', aspectRatio: '1/1', maxHeight: '85vh' };
       case '16-9':
       default:
-        return { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' };
+        return { width: '100%', maxWidth: '1100px', aspectRatio: '16/9', maxHeight: '85vh' };
     }
   };
 
   return (
-    <div className="app-container" style={{ display: 'flex', height: '100vh', width: '100vw', background: 'var(--bg-dark)', color: 'var(--text-main)', overflow: 'hidden' }}>
-      
-      {/* Main Preview Area (TOP on Mobile, LEFT on Desktop) */}
-      <div className="preview-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '380px', position: 'relative' }}>
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'row', background: 'var(--bg-base)', overflow: 'hidden' }}>
+      {/* Main Preview Container (LEFT on Desktop, TOP on Mobile) */}
+      <div className="preview-main-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
         
-        {/* Top Navbar */}
-        <div className="top-navbar" style={{
-          height: '56px',
-          borderBottom: '1px solid var(--border-color)',
+        {/* Navbar */}
+        <header style={{
+          height: '60px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 16px',
-          background: 'rgba(10, 12, 16, 0.85)',
-          backdropFilter: 'blur(10px)',
-          zIndex: 10
+          padding: '0 24px',
+          borderBottom: '1px solid var(--border-color)',
+          zIndex: 10,
+          background: 'rgba(9, 12, 16, 0.8)',
+          backdropFilter: 'blur(8px)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: '800', letterSpacing: '-0.02em', background: 'linear-gradient(90deg, #6366f1, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              ANTIGRAVITY 4K
-            </span>
-            <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.6rem', padding: '2px 5px' }}>
-              PWA
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Layers size={18} color="#fff" />
+            </div>
+            <h1 style={{ fontSize: '1.1rem', fontWeight: '800', letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #fff, #a5b4fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              ShaderMotion Studio
+            </h1>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {/* Quick Add to Queue Button */}
-            <button
-              className="glass-btn primary"
-              onClick={handleAddToQueue}
-              style={{ padding: '5px 8px', fontSize: '0.7rem' }}
-              title="Tambahkan racikan visual saat ini ke antrean render Colab"
-            >
-              <ListPlus size={13} /> + Antrean ({renderQueue.length})
-            </button>
-
-            {/* Aspect Ratio Switcher */}
-            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.4)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-              <button
-                className={`glass-btn ${aspectRatio === '16-9' ? 'active' : ''}`}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Aspect Ratio Selector */}
+            <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.05)', borderRadius: 'var(--radius-sm)', padding: '3px', gap: '2px', border: '1px solid var(--border-color)' }}>
+              <button 
                 onClick={() => setAspectRatio('16-9')}
-                style={{ padding: '4px 6px', fontSize: '0.65rem' }}
-                title="16:9 Landscape"
+                className={`glass-btn ${aspectRatio === '16-9' ? 'active' : ''}`}
+                style={{ padding: '6px 10px', fontSize: '0.75rem', border: 'none' }}
+                title="16:9 Landscape Video"
               >
-                <Monitor size={11} /> 16:9
+                <Monitor size={14} /> 16:9
               </button>
-              <button
-                className={`glass-btn ${aspectRatio === '9-16' ? 'active' : ''}`}
+              <button 
                 onClick={() => setAspectRatio('9-16')}
-                style={{ padding: '4px 6px', fontSize: '0.65rem' }}
-                title="9:16 Reels/TikTok"
+                className={`glass-btn ${aspectRatio === '9-16' ? 'active' : ''}`}
+                style={{ padding: '6px 10px', fontSize: '0.75rem', border: 'none' }}
+                title="9:16 Vertical Video / Story"
               >
-                <Smartphone size={11} /> 9:16
+                <Smartphone size={14} /> 9:16
               </button>
-              <button
-                className={`glass-btn ${aspectRatio === '1-1' ? 'active' : ''}`}
+              <button 
                 onClick={() => setAspectRatio('1-1')}
-                style={{ padding: '4px 6px', fontSize: '0.65rem' }}
+                className={`glass-btn ${aspectRatio === '1-1' ? 'active' : ''}`}
+                style={{ padding: '6px 10px', fontSize: '0.75rem', border: 'none' }}
                 title="1:1 Square"
               >
-                <Square size={11} /> 1:1
+                <Square size={14} /> 1:1
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Viewport Canvas Container */}
-        <div className="canvas-viewport" style={{
+            {/* Tombol Antrean Navbar */}
+            <button
+              onClick={handleAddToQueue}
+              className="glass-btn"
+              style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '6px', background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10b981' }}
+              title="Tambahkan desain visual saat ini ke antrean render batch"
+            >
+              <ListPlus size={14} /> + Antrean ({renderQueue.length})
+            </button>
+          </div>
+        </header>
+
+        {/* Live Canvas Viewport */}
+        <div style={{
           flex: 1,
-          width: '100%',
-          height: '100%',
-          minHeight: '320px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '12px',
+          padding: '24px',
           position: 'relative',
           overflow: 'hidden'
         }}>
@@ -290,6 +294,7 @@ export default function App() {
         renderQueue={renderQueue}
         onClearQueue={handleClearQueue}
         onRemoveFromQueue={handleRemoveFromQueue}
+        onApplyConfig={handleApplyConfig}
       />
     </div>
   );
