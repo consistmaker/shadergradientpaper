@@ -77,7 +77,7 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // Deterministic Strict Constant Frame Rate (CFR 30 FPS = Exactly 300 Frames in 10s)
+  // Direct Direct WebGL Stream Capture (100% Berwarna & Anti Layar Hitam)
   const handleStartLocalRecord = async () => {
     try {
       const canvases = Array.from(document.querySelectorAll('canvas'));
@@ -91,27 +91,27 @@ export default function ExportModal({
       setIsRecording(true);
       setRecordingProgress(0);
 
-      const targetWidth = resolutionConfig.width;
-      const targetHeight = resolutionConfig.height;
+      // Tangkap stream langsung dari kanvas WebGL sumber pada 30 FPS konstan
+      const stream = sourceCanvas.captureStream ? sourceCanvas.captureStream(30) : null;
+      if (!stream) {
+        alert('Browser tidak mendukung capture stream WebGL');
+        setIsRecording(false);
+        return;
+      }
 
-      const recordCanvas = document.createElement('canvas');
-      recordCanvas.width = targetWidth;
-      recordCanvas.height = targetHeight;
-      const ctx = recordCanvas.getContext('2d', { alpha: false, desynchronized: true });
-
-      // captureStream(0) = Manual Deterministic Frame Request (No dropped frames, exact 30 FPS!)
-      const stream = recordCanvas.captureStream(0);
-      const videoTrack = stream.getVideoTracks()[0];
-
+      // Deteksi format video MP4 / WebM
       let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
-      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+        mimeType = 'video/mp4;codecs=avc1';
+        ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
         ext = 'webm';
-      } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.4d002a')) {
-        mimeType = 'video/mp4;codecs=avc1.4d002a';
-        ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        mimeType = 'video/webm;codecs=vp8';
+        ext = 'webm';
       } else if (MediaRecorder.isTypeSupported('video/webm')) {
         mimeType = 'video/webm';
         ext = 'webm';
@@ -139,50 +139,30 @@ export default function ExportModal({
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_30fps_exact_${Date.now()}.${ext}`;
+        a.download = `motion_${targetResolution}_${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
         setRecordingProgress(0);
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(250); // Minta chunks data setiap 250ms
 
-      const targetFps = 30;
-      const durationSeconds = 10;
-      const totalFrames = targetFps * durationSeconds; // TEPAT 300 FRAME MUTLAK
-      const frameIntervalMs = 1000 / targetFps; // 33.33ms
+      const totalDuration = 10; // 10 detik
+      let elapsedSeconds = 0;
 
-      let currentFrameCount = 0;
-
-      // Timer presisi mutlak berbasis interval per-frame agar tepat 300 frame ter-request
-      const renderInterval = setInterval(() => {
-        currentFrameCount++;
-
-        // Render frame dari kanvas sumber ke kanvas perekam
-        if (sourceCanvas && ctx) {
-          ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
-          
-          // Request frame eksplisit ke MediaStream (Menjamin frame tidak pernah didrop!)
-          if (videoTrack && typeof videoTrack.requestFrame === 'function') {
-            videoTrack.requestFrame();
-          }
-        }
-
-        // Update progress bar
-        const progress = Math.min(Math.round((currentFrameCount / totalFrames) * 100), 100);
+      const progressTimer = setInterval(() => {
+        elapsedSeconds += 0.5;
+        const progress = Math.min(Math.round((elapsedSeconds / totalDuration) * 100), 100);
         setRecordingProgress(progress);
 
-        // Berhenti TEPAT di frame ke-300
-        if (currentFrameCount >= totalFrames) {
-          clearInterval(renderInterval);
-          setTimeout(() => {
-            if (mediaRecorder.state === 'recording') {
-              mediaRecorder.stop();
-            }
-          }, 300);
+        if (elapsedSeconds >= totalDuration) {
+          clearInterval(progressTimer);
+          if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+          }
         }
-      }, frameIntervalMs);
+      }, 500);
 
     } catch (err) {
       console.error('Local record error:', err);
@@ -219,7 +199,7 @@ export default function ExportModal({
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Render video 16:9 murni FHD/4K konstan 30 FPS (Tepat 300 Frame Mutlak)
+                Render video langsung dari VGA Laptop atau Batch Cloud Colab
               </p>
             </div>
           </div>
@@ -230,10 +210,10 @@ export default function ExportModal({
         <div style={{ marginBottom: '12px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Monitor size={15} color="var(--primary)" /> Format Rasio 16:9 Widescreen (30 FPS Constant):
+              <Monitor size={15} color="var(--primary)" /> Format Rasio 16:9 Widescreen:
             </span>
             <span style={{ fontSize: '0.7rem', color: targetResolution === '1080p' ? '#10b981' : '#a855f7', fontWeight: '700' }}>
-              {targetResolution === '1080p' ? '⚡ 1920x1080 FHD (Tepat 300 Frame)' : '💎 3840x2160 4K UHD (Tepat 300 Frame)'}
+              {targetResolution === '1080p' ? '⚡ 1920x1080 FHD (~20MB - 30MB)' : '💎 3840x2160 4K UHD (~35MB - 50MB)'}
             </span>
           </div>
 
@@ -244,7 +224,7 @@ export default function ExportModal({
               style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
             >
               <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>Full HD 1080p (16:9)</span>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>1920x1080 @ 30 FPS Exact</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>1920x1080 @ 25 Mbps</span>
             </button>
             <button
               onClick={() => setTargetResolution('4k')}
@@ -252,7 +232,7 @@ export default function ExportModal({
               style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
             >
               <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>4K UHD 2160p (16:9)</span>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>3840x2160 @ 30 FPS Exact</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>3840x2160 @ 45 Mbps</span>
             </button>
           </div>
         </div>
@@ -264,7 +244,7 @@ export default function ExportModal({
             className={`glass-btn ${exportTarget === 'local_record' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <Cpu size={16} /> 1. Render VGA Laptop (Exact 300 Frames)
+            <Cpu size={16} /> 1. Render VGA Laptop (16:9 Instan)
           </button>
           <button
             onClick={() => setExportTarget('colab_batch')}
@@ -281,9 +261,9 @@ export default function ExportModal({
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Video color="#10b981" size={24} />
               <div>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Render Konstan 30 FPS (Tepat 300 Frames)</h4>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Render Langsung Menggunakan VGA Laptop</h4>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Menggunakan sistem <strong>Deterministic Frame Trigger</strong> sehingga tidak akan ada frame yang drop / hilang. Hasil video tepat 300 frame (10 detik @ 30fps).
+                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop ({resolutionConfig.label}) dengan bitrate tinggi sehingga ukuran video padat dan tajam.
                 </p>
               </div>
             </div>
@@ -294,7 +274,7 @@ export default function ExportModal({
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
                     <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
                   </span>
-                  <span className="font-mono">Tepat 300 Frame Loop</span>
+                  <span className="font-mono">10 Detik Seamless Loop</span>
                 </div>
                 <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
                   <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
@@ -306,7 +286,7 @@ export default function ExportModal({
                 onClick={handleStartLocalRecord}
                 style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
               >
-                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (Tepat 300 Frame)
+                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (10s)
               </button>
             )}
           </div>
@@ -368,7 +348,7 @@ export default function ExportModal({
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
           <span style={{ fontSize: '0.72rem', color: exportTarget === 'local_record' ? '#10b981' : '#818cf8' }}>
-            {exportTarget === 'local_record' ? `✓ 16:9 Widescreen @ 300 Frames Exact` : `✓ Siap diekspor ke Google Colab`}
+            {exportTarget === 'local_record' ? `✓ 16:9 Widescreen @ ${resolutionConfig.label}` : `✓ Siap diekspor ke Google Colab`}
           </span>
           {exportTarget === 'colab_batch' && (
             <div style={{ display: 'flex', gap: '8px' }}>
