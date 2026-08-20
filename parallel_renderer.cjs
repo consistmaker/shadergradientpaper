@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const http = require('http');
 
 // Server statis lokal untuk mode render
@@ -39,24 +39,7 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Deteksi apakah h264_nvenc didukung di build ffmpeg Colab saat ini
-    let encoderCodec = 'libx264';
-    let encoderPresetArgs = ['-preset', 'ultrafast'];
-
-    try {
-      const ffmpegHelp = execSync('ffmpeg -encoders 2>&1', { encoding: 'utf8' });
-      if (ffmpegHelp.includes('h264_nvenc')) {
-        encoderCodec = 'h264_nvenc';
-        encoderPresetArgs = ['-preset', 'p4', '-tune', 'hq'];
-        console.log('⚡ GPU Hardware Encoder: NVIDIA NVENC (h264_nvenc) Active!');
-      } else {
-        console.log('⚡ Video Encoder: Multi-threaded libx264 Ultra-Fast Active!');
-      }
-    } catch (e) {
-      console.log('⚡ Video Encoder: Multi-threaded libx264 Ultra-Fast Active!');
-    }
-
-    // Launch Chrome dengan Akselerasi GPU Penuh
+    // Launch Chrome dengan Akselerasi GPU Penuh (1 browser instance yang menampung multiple concurrent workers)
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -119,6 +102,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await new Promise(r => setTimeout(r, 2000));
 
+      // Gunakan libx264 ultrafast standar industri (100% stabil di semua environment Linux Colab)
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
@@ -126,9 +110,10 @@ server.listen(4173, '127.0.0.1', async () => {
         '-r', String(fps),
         '-i', '-',
         '-vf', 'scale=3840:2160:flags=lanczos',
-        '-c:v', encoderCodec,
-        ...encoderPresetArgs,
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
+        '-crf', '16',
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
@@ -136,7 +121,11 @@ server.listen(4173, '127.0.0.1', async () => {
       ];
 
       const ffmpeg = spawn('ffmpeg', ffmpegArgs);
-      ffmpeg.stderr.on('data', () => {});
+      
+      let errorLogs = '';
+      ffmpeg.stderr.on('data', (d) => {
+        errorLogs += d.toString();
+      });
 
       const frameDeltaMs = 1000 / fps;
 
@@ -171,7 +160,7 @@ server.listen(4173, '127.0.0.1', async () => {
       await new Promise((resolve, reject) => {
         ffmpeg.on('close', (code) => {
           if (code === 0) resolve();
-          else reject(new Error(`FFmpeg exited with code ${code}`));
+          else reject(new Error(`FFmpeg exited with code ${code}. Details: ${errorLogs.slice(-300)}`));
         });
         ffmpeg.on('error', reject);
       });
