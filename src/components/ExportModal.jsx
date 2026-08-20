@@ -77,7 +77,7 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // Dedicated High-Bitrate 16:9 HD/4K Canvas Rescaler & Recorder
+  // Dedicated Exact 1920x1080 / 3840x2160 VP9 Clean Rescaler
   const handleStartLocalRecord = async () => {
     try {
       const canvases = Array.from(document.querySelectorAll('canvas'));
@@ -91,14 +91,14 @@ export default function ExportModal({
       setIsRecording(true);
       setRecordingProgress(0);
 
-      // Buat Off-Screen 16:9 Canvas dengan resolusi presisi 1920x1080 (FHD) atau 3840x2160 (4K)
+      // Kunci resolusi 1920x1080 (FHD) atau 3840x2160 (4K) tepat tanpa padding 16-macroblock
       const targetWidth = resolutionConfig.width;
       const targetHeight = resolutionConfig.height;
 
       const recordCanvas = document.createElement('canvas');
       recordCanvas.width = targetWidth;
       recordCanvas.height = targetHeight;
-      const ctx = recordCanvas.getContext('2d', { alpha: false });
+      const ctx = recordCanvas.getContext('2d', { alpha: false, desynchronized: true });
 
       let animationFrameId = null;
       const drawFrame = () => {
@@ -111,25 +111,21 @@ export default function ExportModal({
 
       const stream = recordCanvas.captureStream(30);
 
-      // Pilih codec terbaik yang didukung
+      // Gunakan VP9 / WebM profil murni untuk mengunci tepat 1920x1080 piksel
       let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
-      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.640028')) {
-        mimeType = 'video/mp4;codecs=avc1.640028';
-        ext = 'mp4';
-      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
-        mimeType = 'video/mp4';
-        ext = 'mp4';
-      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
         ext = 'webm';
-      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
-        mimeType = 'video/webm;codecs=vp8';
+      } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.4d002a')) {
+        mimeType = 'video/mp4;codecs=avc1.4d002a';
+        ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/webm')) {
+        mimeType = 'video/webm';
         ext = 'webm';
       }
 
-      // Kunci bitrate tinggi (25 Mbps untuk FHD, 45 Mbps untuk 4K) agar ukuran file 20 MB - 40 MB
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
         videoBitsPerSecond: resolutionConfig.bitrate
@@ -154,14 +150,14 @@ export default function ExportModal({
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_16x9_${Date.now()}.${ext}`;
+        a.download = `motion_${targetResolution}_${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
         setRecordingProgress(0);
       };
 
-      mediaRecorder.start(250); // Minta chunks setiap 250ms
+      mediaRecorder.start(250);
 
       const totalSeconds = 10;
       let elapsed = 0;
