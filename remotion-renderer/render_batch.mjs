@@ -35,7 +35,7 @@ async function startBatchRender() {
 
   console.log(`📦 [1/3] Bundling Remotion WebGL Studio (Webpack)...`);
   const bundleLocation = await bundle({
-    entryPoint: path.join(__dirname, 'src', 'index.ts'),
+    entryPoint: path.join(__dirname, 'src', 'index.tsx'),
     webpackOverride: (config) => config
   });
 

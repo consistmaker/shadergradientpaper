@@ -3,22 +3,18 @@
   "version": "1.0.0",
   "description": "Studio Render Motion Graphics 4K/FHD Menggunakan Remotion Engine",
   "scripts": {
-    "preview": "remotion preview src/index.ts",
-    "render": "remotion render src/index.ts MotionShaderComposition out/video.mp4",
-    "render:4k": "remotion render src/index.ts MotionShaderComposition out/video_4k.mp4 --props=\"{\\\"width\\\":3840,\\\"height\\\":2160}\"",
+    "preview": "npx remotion preview src/index.tsx",
+    "render:fhd": "npx remotion render src/index.tsx MotionShaderFHD out/video_fhd.mp4",
+    "render:4k": "npx remotion render src/index.tsx MotionShader4K out/video_4k.mp4",
     "render:batch": "node render_batch.mjs"
   },
   "dependencies": {
     "@paper-design/shaders-react": "^0.0.80",
-    "@react-three/drei": "^10.7.8",
-    "@react-three/fiber": "^9.7.0",
     "@remotion/bundler": "4.0.218",
     "@remotion/cli": "4.0.218",
     "@remotion/renderer": "4.0.218",
-    "@shadergradient/react": "^2.4.20",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "remotion": "4.0.218",
-    "three": "^0.185.1"
+    "remotion": "4.0.218"
   }
 }
