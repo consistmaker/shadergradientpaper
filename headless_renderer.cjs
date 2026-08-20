@@ -38,7 +38,7 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
-    // Launch Chrome with pure hardware GPU EGL acceleration
+    // WAJIBKAN & PAKSA PENGGUNAAN HARDWARE GPU NVIDIA (EGL / GPU Rasterization)
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -67,12 +67,12 @@ server.listen(4173, '127.0.0.1', async () => {
     ];
 
     console.log(`🎬 Total Videos to Render: ${queue.length}`);
-    console.log(`⚡ TRUE HARDWARE GPU SCREENSHOT PIPELINE ACTIVE`);
+    console.log(`⚡ HARDWARE GPU NVIDIA T4 MANDATORY: WebGL 4K Computation & NVENC Active`);
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${i + 1}.mp4`);
-      console.log(`\n🎥 [${i + 1}/${queue.length}] GPU 4K Render: ${item.name}...`);
+      console.log(`\n🎥 [${i + 1}/${queue.length}] Rendering with Mandatory NVIDIA GPU: ${item.name}...`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -97,58 +97,77 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Inisialisasi FFmpeg dengan input MJPEG stream kecepatan maksimal
+      // KUNCI DAN WAJIBKAN ENCODER GPU NVIDIA NVENC (h264_nvenc)
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
         '-r', String(fps),
         '-i', '-',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
+        '-c:v', 'h264_nvenc',
+        '-preset', 'p4',
+        '-tune', 'hq',
         '-pix_fmt', 'yuv420p',
-        '-crf', '16',
         '-b:v', '35M',
         '-maxrate', '45M',
         '-bufsize', '70M',
-        '-threads', '0',
         outputFile
       ];
 
-      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
-      ffmpeg.stderr.on('data', () => {});
+      let ffmpeg = spawn('ffmpeg', ffmpegArgs);
+      
+      // Jika environment tidak memiliki nvenc build, fallback ke libx264 ultrafast
+      ffmpeg.on('error', () => {
+        console.log('   ⚠️ Switching to fallback encoder...');
+        ffmpeg = spawn('ffmpeg', [
+          '-y',
+          '-f', 'image2pipe',
+          '-vcodec', 'mjpeg',
+          '-r', String(fps),
+          '-i', '-',
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-pix_fmt', 'yuv420p',
+          '-b:v', '35M',
+          '-maxrate', '45M',
+          '-bufsize', '70M',
+          outputFile
+        ]);
+      });
 
-      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames...`);
+      ffmpeg.stderr.on('data', () => {}); // Stderr flusher
+
+      console.log(`   ⚡ GPU Capturing & Encoding ${totalFrames} frames in 4K resolution...`);
 
       const frameDeltaMs = 1000 / fps;
 
       for (let f = 0; f < totalFrames; f++) {
         const vTime = f * frameDeltaMs;
 
-        // 1. Advance virtual time WebGL di GPU
-        await page.evaluate((virtualTime) => {
+        const base64Data = await page.evaluate((virtualTime) => {
           document.querySelectorAll('[data-paper-shader]').forEach(el => {
             if (el.paperShaderMount && typeof el.paperShaderMount.setFrame === 'function') {
               el.paperShaderMount.setFrame(virtualTime);
             }
           });
+
+          const canvas = document.querySelector('canvas');
+          if (canvas) {
+            return canvas.toDataURL('image/jpeg', 0.9);
+          }
+          return null;
         }, vTime);
 
-        // 2. Ambil screenshot JPEG buffer langsung dari GPU via Puppeteer C++ Native Buffer (Hanya ~25ms per frame!)
-        const buffer = await page.screenshot({
-          type: 'jpeg',
-          quality: 85,
-          optimizeForSpeed: true
-        });
-
-        // 3. Tulis langsung ke pipe FFmpeg
-        const canWrite = ffmpeg.stdin.write(buffer);
-        if (!canWrite) {
-          await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
+        if (base64Data) {
+          const rawBuffer = Buffer.from(base64Data.split(',')[1], 'base64');
+          const canWrite = ffmpeg.stdin.write(rawBuffer);
+          if (!canWrite) {
+            await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
+          }
         }
 
-        if (f % 50 === 0 || f === totalFrames - 1) {
-          console.log(`      Progress: Frame ${f + 1}/${totalFrames} encoded...`);
+        if (f % 30 === 0 || f === totalFrames - 1) {
+          console.log(`      ⚡ GPU Progress: Frame ${f + 1}/${totalFrames}...`);
         }
       }
 

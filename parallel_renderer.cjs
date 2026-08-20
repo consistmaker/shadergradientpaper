@@ -4,6 +4,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
+// Server statis lokal untuk mode render
 const distDir = path.join('/content/shadergradientpaper/dist');
 const server = http.createServer((req, res) => {
   let reqPath = req.url.split('?')[0];
@@ -24,7 +25,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(4173, '127.0.0.1', async () => {
-  console.log('📡 Local Headless WebGL Server live on 127.0.0.1:4173');
+  console.log('📡 Local WebGL Render Server live on 127.0.0.1:4173');
   
   try {
     const recipeRaw = fs.readFileSync('/content/render_recipe.json', 'utf8');
@@ -38,6 +39,7 @@ server.listen(4173, '127.0.0.1', async () => {
       ? '/usr/bin/google-chrome-stable' 
       : (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium-browser');
 
+    // Launch Chrome dengan Akselerasi GPU Penuh (1 browser instance yang menampung multiple concurrent workers)
     const browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: 'new',
@@ -65,12 +67,21 @@ server.listen(4173, '127.0.0.1', async () => {
       }
     ];
 
-    console.log(`🎬 Total Videos to Render: ${queue.length}`);
-    console.log(`⚡ PARALLEL GPU ENGINE: 3 Videos Simultaneously`);
+    const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
+    const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
+    const totalFrames = fps * duration;
+    const CONCURRENCY = parseInt(process.env.CONCURRENCY || '4', 10); // 4 Parallel GPU Workers optimal untuk 15GB VRAM T4
 
-    async function renderSingleVideo(item, index, total) {
-      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${index + 1}.mp4`);
-      console.log(`\n🎥 [${index + 1}/${total}] Parallel Worker Start: ${item.name}...`);
+    console.log(`\n========================================================================`);
+    console.log(`🚀 MULTI-WORKER GPU PARALLEL RENDER ENGINE`);
+    console.log(`🎬 Total Videos: ${queue.length} | Concurrency: ${CONCURRENCY} Videos Simultaneously`);
+    console.log(`⚡ Target Specs: 4K UHD (3840x2160) @ ${fps} FPS (${duration}s Seamless Loop)`);
+    console.log(`========================================================================\n`);
+
+    // Worker Function untuk me-render 1 item video secara paralel
+    async function renderSingleVideo(item, videoIdx) {
+      const outputFile = path.join(outputDir, `motion_4k_${item.engine || 'paper'}_${videoIdx + 1}.mp4`);
+      console.log(`▶️ [Worker Started] Video ${videoIdx + 1}/${queue.length}: ${item.name}`);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
@@ -82,6 +93,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await page.waitForSelector('canvas', { timeout: 15000 }).catch(() => {});
 
+      // Injeksi konfigurasi shader unik ke canvas worker
       await page.evaluate((conf, eng) => {
         if (typeof window.__SET_ENGINE_RENDER === 'function') {
           window.__SET_ENGINE_RENDER(eng, conf);
@@ -90,10 +102,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await new Promise(r => setTimeout(r, 2000));
 
-      const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
-      const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
-      const totalFrames = fps * duration;
-
+      // FFmpeg encoder khusus untuk worker ini
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
@@ -111,7 +120,6 @@ server.listen(4173, '127.0.0.1', async () => {
       ];
 
       let ffmpeg = spawn('ffmpeg', ffmpegArgs);
-      
       ffmpeg.on('error', () => {
         ffmpeg = spawn('ffmpeg', [
           '-y',
@@ -157,10 +165,6 @@ server.listen(4173, '127.0.0.1', async () => {
             await new Promise(resolve => ffmpeg.stdin.once('drain', resolve));
           }
         }
-
-        if (f % 60 === 0 || f === totalFrames - 1) {
-          console.log(`      ⚡ [Video ${index + 1}] Progress: Frame ${f + 1}/${totalFrames}...`);
-        }
       }
 
       ffmpeg.stdin.end();
@@ -173,20 +177,28 @@ server.listen(4173, '127.0.0.1', async () => {
       
       const stats = fs.statSync(outputFile);
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-      console.log(`   ✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
+      console.log(`✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
     }
 
-    // Eksekusi render 3 video sekaligus secara paralel
-    const CONCURRENCY = 3;
-    for (let i = 0; i < queue.length; i += CONCURRENCY) {
-      const batch = queue.slice(i, i + CONCURRENCY);
-      console.log(`\n🚀 Memulai Batch Paralel [${i + 1} - ${Math.min(i + CONCURRENCY, queue.length)} dari ${queue.length}]...`);
-      await Promise.all(batch.map((item, idx) => renderSingleVideo(item, i + idx, queue.length)));
+    // Parallel Pool Scheduler (Menjalankan N video sekaligus secara paralel)
+    let currentIndex = 0;
+    async function workerPool() {
+      while (currentIndex < queue.length) {
+        const idx = currentIndex++;
+        await renderSingleVideo(queue[idx], idx);
+      }
     }
+
+    const workers = [];
+    for (let w = 0; w < Math.min(CONCURRENCY, queue.length); w++) {
+      workers.push(workerPool());
+    }
+
+    await Promise.all(workers);
 
     await browser.close();
     server.close();
-    console.log('\n🎉 ALL REAL WEBGL 4K VIDEOS HAVE BEEN RENDERED SUCCESSFULLY!');
+    console.log('\n🎉 ALL PARALLEL REAL WEBGL 4K VIDEOS HAVE BEEN RENDERED SUCCESSFULLY!');
     process.exit(0);
   } catch (err) {
     console.error('❌ Render Error:', err);
