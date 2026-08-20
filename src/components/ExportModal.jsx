@@ -14,8 +14,8 @@ export default function ExportModal({
   onRemoveFromQueue
 }) {
   const [copied, setCopied] = useState(false);
-  const [exportTarget, setExportTarget] = useState('colab_batch'); // 'colab_batch' | 'local_record'
-  const [targetResolution, setTargetResolution] = useState('1080p'); // '1080p' (FHD - Super Cepat) | '4k' (4K UHD)
+  const [exportTarget, setExportTarget] = useState('local_record'); // 'local_record' | 'colab_batch'
+  const [targetResolution, setTargetResolution] = useState('1080p'); // '1080p' | '4k'
   const [exportMode, setExportMode] = useState(renderQueue.length > 0 ? 'queue' : 'auto_matrix');
   const [batchCount, setBatchCount] = useState(10);
   const [isRecording, setIsRecording] = useState(false);
@@ -24,8 +24,8 @@ export default function ExportModal({
   if (!isOpen) return null;
 
   const resolutionConfig = targetResolution === '1080p' 
-    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD - Fast Render)", bitrate: "20M" }
-    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD - Ultra Quality)", bitrate: "35M" };
+    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 25000000 }
+    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: 45000000 };
 
   // JSON Recipe Data
   const exportData = {
@@ -77,13 +77,13 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // Direct Local WebGL Canvas Auto-Recorder (WebM/MP4)
+  // Dedicated High-Bitrate 16:9 HD/4K Canvas Rescaler & Recorder
   const handleStartLocalRecord = async () => {
     try {
       const canvases = Array.from(document.querySelectorAll('canvas'));
-      const canvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
+      const sourceCanvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
 
-      if (!canvas) {
+      if (!sourceCanvas) {
         alert('Kanvas WebGL tidak ditemukan di layar!');
         return;
       }
@@ -91,30 +91,48 @@ export default function ExportModal({
       setIsRecording(true);
       setRecordingProgress(0);
 
-      const stream = canvas.captureStream ? canvas.captureStream(30) : null;
-      if (!stream) {
-        alert('Browser Anda tidak mendukung direct canvas stream recording.');
-        setIsRecording(false);
-        return;
-      }
+      // Buat Off-Screen 16:9 Canvas dengan resolusi presisi 1920x1080 (FHD) atau 3840x2160 (4K)
+      const targetWidth = resolutionConfig.width;
+      const targetHeight = resolutionConfig.height;
 
-      let mimeType = 'video/webm;codecs=vp8';
+      const recordCanvas = document.createElement('canvas');
+      recordCanvas.width = targetWidth;
+      recordCanvas.height = targetHeight;
+      const ctx = recordCanvas.getContext('2d', { alpha: false });
+
+      let animationFrameId = null;
+      const drawFrame = () => {
+        if (sourceCanvas && ctx) {
+          ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
+        }
+        animationFrameId = requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+
+      const stream = recordCanvas.captureStream(30);
+
+      // Pilih codec terbaik yang didukung
+      let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
-      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
-        mimeType = 'video/mp4;codecs=avc1';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.640028')) {
+        mimeType = 'video/mp4;codecs=avc1.640028';
+        ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
         ext = 'mp4';
       } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
         ext = 'webm';
-      } else if (MediaRecorder.isTypeSupported('video/webm')) {
-        mimeType = 'video/webm';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        mimeType = 'video/webm;codecs=vp8';
         ext = 'webm';
       }
 
+      // Kunci bitrate tinggi (25 Mbps untuk FHD, 45 Mbps untuk 4K) agar ukuran file 20 MB - 40 MB
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
-        videoBitsPerSecond: targetResolution === '1080p' ? 20000000 : 35000000
+        videoBitsPerSecond: resolutionConfig.bitrate
       });
 
       const chunks = [];
@@ -123,8 +141,10 @@ export default function ExportModal({
       };
 
       mediaRecorder.onstop = () => {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
         if (chunks.length === 0) {
-          alert('Perekaman selesai tetapi buffer frame kosong.');
+          alert('Perekaman selesai tetapi buffer kosong.');
           setIsRecording(false);
           setRecordingProgress(0);
           return;
@@ -134,14 +154,14 @@ export default function ExportModal({
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_${activeEngine}_${Date.now()}.${ext}`;
+        a.download = `motion_${targetResolution}_16x9_${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
         setRecordingProgress(0);
       };
 
-      mediaRecorder.start(500);
+      mediaRecorder.start(250); // Minta chunks setiap 250ms
 
       const totalSeconds = 10;
       let elapsed = 0;
@@ -191,23 +211,23 @@ export default function ExportModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileJson color="var(--primary)" size={26} />
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Batch Video Studio</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Pilih resolusi dan target render (FHD Super Fast / 4K UHD Ultra Quality)
+                Render video 16:9 murni FHD/4K langsung dari VGA Laptop atau Batch Cloud Colab
               </p>
             </div>
           </div>
           <button className="glass-btn" onClick={onClose} style={{ padding: '6px' }}><X size={18} /></button>
         </div>
 
-        {/* RESOLUTION SELECTOR: FHD 1080p (Fast) vs 4K UHD */}
+        {/* RESOLUTION SELECTOR */}
         <div style={{ marginBottom: '12px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Monitor size={15} color="var(--primary)" /> Pilihan Resolusi Render:
+              <Monitor size={15} color="var(--primary)" /> Format Rasio 16:9 Widescreen:
             </span>
             <span style={{ fontSize: '0.7rem', color: targetResolution === '1080p' ? '#10b981' : '#a855f7', fontWeight: '700' }}>
-              {targetResolution === '1080p' ? '⚡ 4x Lebih Cepat (~1 Menit/Video)' : '💎 Kualitas Tertinggi (~5 Menit/Video)'}
+              {targetResolution === '1080p' ? '⚡ 1920x1080 FHD (~20MB - 30MB)' : '💎 3840x2160 4K UHD (~35MB - 50MB)'}
             </span>
           </div>
 
@@ -217,39 +237,76 @@ export default function ExportModal({
               className={`glass-btn ${targetResolution === '1080p' ? 'active' : ''}`}
               style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
             >
-              <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>Full HD (1080p)</span>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>1920x1080 (Super Cepat ~1 Min)</span>
+              <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>Full HD 1080p (16:9)</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>1920x1080 @ 25 Mbps</span>
             </button>
             <button
               onClick={() => setTargetResolution('4k')}
               className={`glass-btn ${targetResolution === '4k' ? 'active' : ''}`}
               style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
             >
-              <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>4K UHD (2160p)</span>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>3840x2160 (Ultra Quality ~5 Min)</span>
+              <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>4K UHD 2160p (16:9)</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>3840x2160 @ 45 Mbps</span>
             </button>
           </div>
         </div>
 
-        {/* Target Selector: 1. Cloud Colab Batch vs 2. Auto-Download Lokal */}
+        {/* Target Selector */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px', background: 'rgba(0,0,0,0.4)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
-          <button
-            onClick={() => setExportTarget('colab_batch')}
-            className={`glass-btn ${exportTarget === 'colab_batch' ? 'active' : ''}`}
-            style={{ justifyContent: 'center', gap: '6px' }}
-          >
-            <Cloud size={16} /> 1. Google Colab GPU Batch
-          </button>
           <button
             onClick={() => setExportTarget('local_record')}
             className={`glass-btn ${exportTarget === 'local_record' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <Cpu size={16} /> 2. Auto-Download Browser
+            <Cpu size={16} /> 1. Render VGA Laptop (16:9 Instan)
+          </button>
+          <button
+            onClick={() => setExportTarget('colab_batch')}
+            className={`glass-btn ${exportTarget === 'colab_batch' ? 'active' : ''}`}
+            style={{ justifyContent: 'center', gap: '6px' }}
+          >
+            <Cloud size={16} /> 2. Google Colab GPU (Batch Massal)
           </button>
         </div>
 
-        {/* PILIHAN 1: GOOGLE COLAB MASSAL */}
+        {/* PILIHAN 1: AUTO DOWNLOAD LOKAL INSTAN */}
+        {exportTarget === 'local_record' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Video color="#10b981" size={24} />
+              <div>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Render Langsung Menggunakan VGA Laptop</h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Mengunci rasio <strong>16:9 Widescreen</strong> pada resolusi <strong>{resolutionConfig.label}</strong> dengan bitrate tinggi sehingga ukuran video padat dan tajam.
+                </p>
+              </div>
+            </div>
+
+            {isRecording ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
+                    <Loader2 size={14} className="spin" /> Merekam Frame 16:9 ({recordingProgress}%)...
+                  </span>
+                  <span className="font-mono">10 Detik Seamless Loop</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
+                </div>
+              </div>
+            ) : (
+              <button
+                className="glass-btn primary"
+                onClick={handleStartLocalRecord}
+                style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+              >
+                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} 16:9 (10s)
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* PILIHAN 2: GOOGLE COLAB MASSAL */}
         {exportTarget === 'colab_batch' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.4)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
@@ -302,47 +359,10 @@ export default function ExportModal({
           </div>
         )}
 
-        {/* PILIHAN 2: AUTO DOWNLOAD LOKAL INSTAN */}
-        {exportTarget === 'local_record' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Video color="#10b981" size={24} />
-              <div>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Auto-Download Langsung di Browser</h4>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop ({resolutionConfig.label}) dan langsung ter-download ke PC/HP Anda.
-                </p>
-              </div>
-            </div>
-
-            {isRecording ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
-                    <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
-                  </span>
-                  <span className="font-mono">10 Detik Loop</span>
-                </div>
-                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
-                </div>
-              </div>
-            ) : (
-              <button
-                className="glass-btn primary"
-                onClick={handleStartLocalRecord}
-                style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
-              >
-                <Download size={18} /> Mulai Download Video {targetResolution.toUpperCase()} (10s Loop)
-              </button>
-            )}
-          </div>
-        )}
-
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
-          <span style={{ fontSize: '0.72rem', color: exportTarget === 'colab_batch' ? '#818cf8' : '#10b981' }}>
-            {exportTarget === 'colab_batch' ? `✓ Resep ${targetResolution.toUpperCase()} siap diekspor ke Colab` : `✓ Siap dirender lokal di browser`}
+          <span style={{ fontSize: '0.72rem', color: exportTarget === 'local_record' ? '#10b981' : '#818cf8' }}>
+            {exportTarget === 'local_record' ? `✓ 16:9 Widescreen @ ${resolutionConfig.label}` : `✓ Siap diekspor ke Google Colab`}
           </span>
           {exportTarget === 'colab_batch' && (
             <div style={{ display: 'flex', gap: '8px' }}>
