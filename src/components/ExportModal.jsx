@@ -70,10 +70,9 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // Robust Canvas Frame Capture & WebM/MP4 Recorder
+  // High-Bitrate Master Canvas Frame Capture & WebM/MP4 Recorder (Target 30MB - 50MB)
   const handleStartLocalRecord = async () => {
     try {
-      // Cari elemen canvas WebGL asli yang sedang aktif
       const canvases = Array.from(document.querySelectorAll('canvas'));
       const canvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
 
@@ -85,7 +84,7 @@ export default function ExportModal({
       setIsRecording(true);
       setRecordingProgress(0);
 
-      // Gunakan canvas stream 30 FPS
+      // Gunakan canvas stream 30 FPS penuh
       const stream = canvas.captureStream ? canvas.captureStream(30) : null;
       if (!stream) {
         alert('Browser Anda tidak mendukung direct canvas stream recording.');
@@ -93,24 +92,28 @@ export default function ExportModal({
         return;
       }
 
-      // Deteksi format video yang didukung browser
-      let mimeType = 'video/webm;codecs=vp8';
+      // Prioritaskan Codec High Bitrate VP9 / AVC1
+      let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
-      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
-        mimeType = 'video/mp4;codecs=avc1';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.640028')) {
+        mimeType = 'video/mp4;codecs=avc1.640028';
+        ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
         ext = 'mp4';
       } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
         ext = 'webm';
-      } else if (MediaRecorder.isTypeSupported('video/webm')) {
-        mimeType = 'video/webm';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        mimeType = 'video/webm;codecs=vp8';
         ext = 'webm';
       }
 
+      // Kunci Bitrate ke 40 Mbps (40,000,000 bps) agar ukuran video 10 detik konsisten di 35 MB - 50 MB
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 25000000 // 25 Mbps
+        videoBitsPerSecond: 40000000 // 40 Mbps Master Quality
       });
 
       const chunks = [];
@@ -122,7 +125,7 @@ export default function ExportModal({
 
       mediaRecorder.onstop = () => {
         if (chunks.length === 0) {
-          alert('Perekaman selesai tetapi buffer frame kosong. Silakan gunakan opsi Google Colab.');
+          alert('Perekaman selesai tetapi buffer frame kosong.');
           setIsRecording(false);
           setRecordingProgress(0);
           return;
@@ -139,10 +142,9 @@ export default function ExportModal({
         setRecordingProgress(0);
       };
 
-      // Minta data setiap 500ms agar chunks tidak kosong
-      mediaRecorder.start(500);
+      // Rekam chunk data setiap 250ms secara presisi
+      mediaRecorder.start(250);
 
-      // Progress bar 10 detik
       const totalSeconds = 10;
       let elapsed = 0;
       const interval = setInterval(() => {
@@ -160,7 +162,7 @@ export default function ExportModal({
 
     } catch (err) {
       console.error('Local record error:', err);
-      alert('Gagal merekam lokal: ' + err.message);
+      alert('Gagal merekam: ' + err.message);
       setIsRecording(false);
     }
   };
@@ -193,7 +195,7 @@ export default function ExportModal({
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Pilih antara Auto-Download Langsung di Browser atau Batch Render di Google Colab
+                Pilih antara Auto-Download Langsung di Browser atau GPU Batch Render Colab
               </p>
             </div>
           </div>
@@ -207,14 +209,14 @@ export default function ExportModal({
             className={`glass-btn ${exportTarget === 'local_record' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <Cpu size={16} /> 1. Auto-Download Local (Instant)
+            <Cpu size={16} /> 1. Auto-Download Langsung (UI)
           </button>
           <button
             onClick={() => setExportTarget('colab_batch')}
             className={`glass-btn ${exportTarget === 'colab_batch' ? 'active' : ''}`}
             style={{ justifyContent: 'center', gap: '6px' }}
           >
-            <Cloud size={16} /> 2. Google Colab (Massal 4K)
+            <Cloud size={16} /> 2. GPU Batch Colab (Massal 4K)
           </button>
         </div>
 
@@ -224,9 +226,9 @@ export default function ExportModal({
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Video color="#10b981" size={24} />
               <div>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Auto-Download Video Langsung di Browser</h4>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Master Quality Instant Recorder</h4>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop (25 Mbps High Quality) dan langsung ter-download ke PC/HP Anda tanpa butuh Google Colab.
+                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop dengan <b>Bitrate 40 Mbps (Ukuran target 35 MB - 50 MB)</b> tanpa watermark dan langsung ter-download ke PC/Laptop Anda.
                 </p>
               </div>
             </div>
@@ -237,7 +239,7 @@ export default function ExportModal({
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
                     <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
                   </span>
-                  <span className="font-mono">10 Detik Seamless Loop</span>
+                  <span className="font-mono">10 Detik Seamless Loop (40 Mbps)</span>
                 </div>
                 <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
                   <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
@@ -249,7 +251,7 @@ export default function ExportModal({
                 onClick={handleStartLocalRecord}
                 style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
               >
-                <Download size={18} /> Mulai Auto-Download Video Sekarang (10s Loop)
+                <Download size={18} /> Mulai Auto-Download Video Sekarang (10s Loop ~40MB)
               </button>
             )}
           </div>
@@ -311,7 +313,7 @@ export default function ExportModal({
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
           <span style={{ fontSize: '0.72rem', color: exportTarget === 'local_record' ? '#10b981' : '#818cf8' }}>
-            {exportTarget === 'local_record' ? '✓ Auto-Download lokal browser' : `✓ Siap diekspor ke Google Colab`}
+            {exportTarget === 'local_record' ? '✓ Bitrate 40 Mbps terkunci (~35MB - 50MB)' : `✓ Siap diekspor ke GPU Parallel Colab`}
           </span>
           {exportTarget === 'colab_batch' && (
             <div style={{ display: 'flex', gap: '8px' }}>
