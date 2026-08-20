@@ -70,12 +70,12 @@ server.listen(4173, '127.0.0.1', async () => {
     const fps = (recipe.metadata && recipe.metadata.targetFps) || 30;
     const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
     const totalFrames = fps * duration;
-    const CONCURRENCY = parseInt(process.env.CONCURRENCY || '4', 10); // 4 Parallel GPU Workers optimal untuk 15GB VRAM T4
+    const CONCURRENCY = parseInt(process.env.CONCURRENCY || '3', 10);
 
     console.log(`\n========================================================================`);
     console.log(`🚀 MULTI-WORKER GPU PARALLEL RENDER ENGINE`);
     console.log(`🎬 Total Videos: ${queue.length} | Concurrency: ${CONCURRENCY} Videos Simultaneously`);
-    console.log(`⚡ Target Specs: 4K UHD (3840x2160) @ ${fps} FPS (${duration}s Seamless Loop)`);
+    console.log(`⚡ Target Specs: TRUE 4K UHD (3840x2160 16:9) @ ${fps} FPS (${duration}s Seamless Loop)`);
     console.log(`========================================================================\n`);
 
     // Worker Function untuk me-render 1 item video secara paralel
@@ -84,6 +84,7 @@ server.listen(4173, '127.0.0.1', async () => {
       console.log(`▶️ [Worker Started] Video ${videoIdx + 1}/${queue.length}: ${item.name}`);
 
       const page = await browser.newPage();
+      // Kunci resolusi viewport browser tepat di True 4K UHD 3840x2160
       await page.setViewport({ width: 3840, height: 2160, deviceScaleFactor: 1 });
       
       await page.goto('http://127.0.0.1:4173/?render=clean', { 
@@ -102,13 +103,14 @@ server.listen(4173, '127.0.0.1', async () => {
 
       await new Promise(r => setTimeout(r, 2000));
 
-      // FFmpeg encoder khusus untuk worker ini
+      // FFmpeg encoder dengan skala paksa True 4K (scale=3840:2160)
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
         '-r', String(fps),
         '-i', '-',
+        '-vf', 'scale=3840:2160:flags=lanczos',
         '-c:v', 'h264_nvenc',
         '-preset', 'p4',
         '-tune', 'hq',
@@ -127,6 +129,7 @@ server.listen(4173, '127.0.0.1', async () => {
           '-vcodec', 'mjpeg',
           '-r', String(fps),
           '-i', '-',
+          '-vf', 'scale=3840:2160:flags=lanczos',
           '-c:v', 'libx264',
           '-preset', 'ultrafast',
           '-pix_fmt', 'yuv420p',
@@ -177,7 +180,7 @@ server.listen(4173, '127.0.0.1', async () => {
       
       const stats = fs.statSync(outputFile);
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-      console.log(`✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB)`);
+      console.log(`✅ Success 4K Render: ${outputFile} (Size: ${sizeInMB} MB | Resolution: 3840x2160)`);
     }
 
     // Parallel Pool Scheduler (Menjalankan N video sekaligus secara paralel)
