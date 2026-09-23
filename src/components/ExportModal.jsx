@@ -77,7 +77,7 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // Dedicated Exact-Pixel Rescaler Canvas (Mencegah ukuran acak viewport browser)
+  // VIDEO ELEMENT BRIDGE: Tangkap WebGL stream (anti hitam) → Video Element → Canvas 1920x1080 PASTI
   const handleStartLocalRecord = async () => {
     try {
       const canvases = Array.from(document.querySelectorAll('canvas'));
@@ -94,24 +94,46 @@ export default function ExportModal({
       const targetWidth = resolutionConfig.width;
       const targetHeight = resolutionConfig.height;
 
-      // Buat canvas perantara dengan dimensi PASTI (1920x1080 atau 3840x2160)
+      // LANGKAH 1: Tangkap stream langsung dari WebGL canvas (anti layar hitam)
+      const webglStream = sourceCanvas.captureStream(30);
+
+      // LANGKAH 2: Buat elemen <video> tersembunyi yang memainkan stream WebGL
+      const videoEl = document.createElement('video');
+      videoEl.srcObject = webglStream;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      videoEl.style.position = 'fixed';
+      videoEl.style.top = '-9999px';
+      videoEl.style.left = '-9999px';
+      videoEl.style.width = '1px';
+      videoEl.style.height = '1px';
+      videoEl.style.opacity = '0';
+      videoEl.style.pointerEvents = 'none';
+      document.body.appendChild(videoEl);
+      await videoEl.play();
+
+      // LANGKAH 3: Buat canvas output dengan dimensi PASTI 1920x1080 atau 3840x2160
       const exportCanvas = document.createElement('canvas');
       exportCanvas.width = targetWidth;
       exportCanvas.height = targetHeight;
-      const ctx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true });
+      const ctx = exportCanvas.getContext('2d', { alpha: false });
 
+      // LANGKAH 4: Loop gambar ulang video → canvas berukuran pasti
       let isDrawing = true;
       const drawLoop = () => {
         if (!isDrawing) return;
-        if (sourceCanvas && ctx) {
-          ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
+        if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA && ctx) {
+          ctx.drawImage(videoEl, 0, 0, targetWidth, targetHeight);
         }
         requestAnimationFrame(drawLoop);
       };
       drawLoop();
 
-      // Tangkap stream dari exportCanvas yang berukuran PAS 1920x1080 atau 3840x2160
-      const stream = exportCanvas.captureStream(30);
+      // Tunggu 100ms agar video element sudah mulai render frame pertama
+      await new Promise(r => setTimeout(r, 100));
+
+      // LANGKAH 5: Tangkap stream dari exportCanvas yang berukuran TEPAT
+      const exportStream = exportCanvas.captureStream(30);
 
       // Deteksi format video MP4 / WebM
       let mimeType = 'video/webm;codecs=vp9';
@@ -131,7 +153,7 @@ export default function ExportModal({
         ext = 'webm';
       }
 
-      const mediaRecorder = new MediaRecorder(stream, {
+      const mediaRecorder = new MediaRecorder(exportStream, {
         mimeType: mimeType,
         videoBitsPerSecond: resolutionConfig.bitrate
       });
@@ -143,6 +165,11 @@ export default function ExportModal({
 
       mediaRecorder.onstop = () => {
         isDrawing = false;
+        // Bersihkan elemen video tersembunyi
+        videoEl.pause();
+        videoEl.srcObject = null;
+        if (videoEl.parentNode) videoEl.parentNode.removeChild(videoEl);
+
         if (chunks.length === 0) {
           alert('Perekaman selesai tetapi buffer kosong.');
           setIsRecording(false);
@@ -161,9 +188,9 @@ export default function ExportModal({
         setRecordingProgress(0);
       };
 
-      mediaRecorder.start(250); // Minta chunks data setiap 250ms
+      mediaRecorder.start(250);
 
-      const totalDuration = 10; // 10 detik
+      const totalDuration = 10;
       let elapsedSeconds = 0;
 
       const progressTimer = setInterval(() => {
