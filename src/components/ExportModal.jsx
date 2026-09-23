@@ -218,8 +218,8 @@ export default function ExportModal({
       // Minta data chunk tiap 500ms
       mediaRecorder.start(500);
 
-      // EXACT 10.5 DETIK
-      const TARGET_TOTAL_MS = 10500;
+      // EXACT 12.0 DETIK (Karena MediaRecorder Chrome sering delay 1-2 detik di awal)
+      const TARGET_TOTAL_MS = 12000;
       const startTime = performance.now();
 
       const progressInterval = setInterval(() => {
@@ -349,7 +349,7 @@ export default function ExportModal({
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
                     <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
                   </span>
-                  <span className="font-mono">10 Detik Penuh (300 Frame)</span>
+                  <span className="font-mono">12 Detik Penuh (Auto-Cut Chrome Delay)</span>
                 </div>
                 <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
                   <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.2s linear' }} />
