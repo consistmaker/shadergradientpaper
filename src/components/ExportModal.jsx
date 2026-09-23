@@ -24,8 +24,8 @@ export default function ExportModal({
   if (!isOpen) return null;
 
   const resolutionConfig = targetResolution === '1080p' 
-    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 25000000 }
-    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: 45000000 };
+    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 30000000 }
+    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: 60000000 };
 
   // JSON Recipe Data
   const exportData = {
@@ -77,7 +77,7 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // Direct Direct WebGL Stream Capture (100% Berwarna & Anti Layar Hitam)
+  // Dedicated Exact-Pixel Rescaler Canvas (Mencegah ukuran acak viewport browser)
   const handleStartLocalRecord = async () => {
     try {
       const canvases = Array.from(document.querySelectorAll('canvas'));
@@ -91,26 +91,40 @@ export default function ExportModal({
       setIsRecording(true);
       setRecordingProgress(0);
 
-      // Tangkap stream langsung dari kanvas WebGL sumber pada 30 FPS konstan
-      const stream = sourceCanvas.captureStream ? sourceCanvas.captureStream(30) : null;
-      if (!stream) {
-        alert('Browser tidak mendukung capture stream WebGL');
-        setIsRecording(false);
-        return;
-      }
+      const targetWidth = resolutionConfig.width;
+      const targetHeight = resolutionConfig.height;
+
+      // Buat canvas perantara dengan dimensi PASTI (1920x1080 atau 3840x2160)
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = targetWidth;
+      exportCanvas.height = targetHeight;
+      const ctx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true });
+
+      let isDrawing = true;
+      const drawLoop = () => {
+        if (!isDrawing) return;
+        if (sourceCanvas && ctx) {
+          ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
+        }
+        requestAnimationFrame(drawLoop);
+      };
+      drawLoop();
+
+      // Tangkap stream dari exportCanvas yang berukuran PAS 1920x1080 atau 3840x2160
+      const stream = exportCanvas.captureStream(30);
 
       // Deteksi format video MP4 / WebM
       let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
-      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
-        mimeType = 'video/mp4;codecs=avc1';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.640028')) {
+        mimeType = 'video/mp4;codecs=avc1.640028';
+        ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
         ext = 'mp4';
       } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
-        ext = 'webm';
-      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
-        mimeType = 'video/webm;codecs=vp8';
         ext = 'webm';
       } else if (MediaRecorder.isTypeSupported('video/webm')) {
         mimeType = 'video/webm';
@@ -128,6 +142,7 @@ export default function ExportModal({
       };
 
       mediaRecorder.onstop = () => {
+        isDrawing = false;
         if (chunks.length === 0) {
           alert('Perekaman selesai tetapi buffer kosong.');
           setIsRecording(false);
@@ -139,7 +154,7 @@ export default function ExportModal({
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_${Date.now()}.${ext}`;
+        a.download = `motion_${targetResolution}_16x9_${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
@@ -199,7 +214,7 @@ export default function ExportModal({
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Render video langsung dari VGA Laptop atau Batch Cloud Colab
+                Render video 16:9 murni FHD ($1920\times 1080$) / 4K ($3840\times 2160$)
               </p>
             </div>
           </div>
@@ -213,7 +228,7 @@ export default function ExportModal({
               <Monitor size={15} color="var(--primary)" /> Format Rasio 16:9 Widescreen:
             </span>
             <span style={{ fontSize: '0.7rem', color: targetResolution === '1080p' ? '#10b981' : '#a855f7', fontWeight: '700' }}>
-              {targetResolution === '1080p' ? '⚡ 1920x1080 FHD (~20MB - 30MB)' : '💎 3840x2160 4K UHD (~35MB - 50MB)'}
+              {targetResolution === '1080p' ? '⚡ 1920x1080 Full HD (Pasti 16:9)' : '💎 3840x2160 4K UHD (Pasti 16:9)'}
             </span>
           </div>
 
@@ -224,7 +239,7 @@ export default function ExportModal({
               style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
             >
               <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>Full HD 1080p (16:9)</span>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>1920x1080 @ 25 Mbps</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Pasti 1920x1080 Piksel</span>
             </button>
             <button
               onClick={() => setTargetResolution('4k')}
@@ -232,7 +247,7 @@ export default function ExportModal({
               style={{ justifyContent: 'center', flexDirection: 'column', padding: '8px', gap: '2px' }}
             >
               <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>4K UHD 2160p (16:9)</span>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>3840x2160 @ 45 Mbps</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Pasti 3840x2160 Piksel</span>
             </button>
           </div>
         </div>
@@ -263,7 +278,7 @@ export default function ExportModal({
               <div>
                 <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Render Langsung Menggunakan VGA Laptop</h4>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Merekam kanvas visual yang sedang aktif saat ini selama 10 detik loop ({resolutionConfig.label}) dengan bitrate tinggi sehingga ukuran video padat dan tajam.
+                  Mengunci resolusi tepat pada <strong>{resolutionConfig.label}</strong> dengan penyesuai piksel presisi tinggi sehingga hasil video tidak terpotong oleh ukuran layar.
                 </p>
               </div>
             </div>
@@ -286,7 +301,7 @@ export default function ExportModal({
                 onClick={handleStartLocalRecord}
                 style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
               >
-                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (10s)
+                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (16:9 Pas)
               </button>
             )}
           </div>
@@ -348,7 +363,7 @@ export default function ExportModal({
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
           <span style={{ fontSize: '0.72rem', color: exportTarget === 'local_record' ? '#10b981' : '#818cf8' }}>
-            {exportTarget === 'local_record' ? `✓ 16:9 Widescreen @ ${resolutionConfig.label}` : `✓ Siap diekspor ke Google Colab`}
+            {exportTarget === 'local_record' ? `✓ Output Widescreen @ ${resolutionConfig.label}` : `✓ Siap diekspor ke Google Colab`}
           </span>
           {exportTarget === 'colab_batch' && (
             <div style={{ display: 'flex', gap: '8px' }}>
