@@ -77,18 +77,20 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // NATIVE CANVAS RESIZE METHOD
+  // MASTER CANVAS APPROACH (GUARANTEED RESOLUTION)
   const handleStartLocalRecord = async () => {
+    let masterCanvas = null;
+    let animId = null;
+
     try {
       setIsRecording(true);
       setRecordingProgress(0);
 
       const targetWidth = resolutionConfig.width;
       const targetHeight = resolutionConfig.height;
-      const dpr = window.devicePixelRatio || 1;
 
       // Cari elemen kanvas WebGL sumber di layar
-      const canvases = Array.from(document.querySelectorAll('canvas'));
+      const canvases = Array.from(document.querySelectorAll('canvas')).filter(c => !c.id || c.id !== '__MASTER_ENFORCE_CANVAS__');
       const sourceCanvas = canvases.find(c => c.width > 50 && c.height > 50) || canvases[0];
 
       if (!sourceCanvas) {
@@ -97,63 +99,67 @@ export default function ExportModal({
         return;
       }
 
-      // Paksa resize container viewport utama agar canvas menyesuaikan diri
-      const previewContainer = document.querySelector('.canvas-viewport');
-      const innerDiv = previewContainer ? previewContainer.querySelector('div') : null;
-      
-      const origPreviewStyle = previewContainer ? previewContainer.style.cssText : '';
-      const origInnerStyle = innerDiv ? innerDiv.style.cssText : '';
-      
-      const targetCssW = targetWidth / dpr;
-      const targetCssH = targetHeight / dpr;
+      // BUAT MASTER OUTPUT CANVAS & WAJIB ATTACH KE BODY SUPAYA GPU DRIVER TIDAK MENGABAIKAN RESOLUSI
+      masterCanvas = document.createElement('canvas');
+      masterCanvas.id = '__MASTER_ENFORCE_CANVAS__';
+      masterCanvas.width = targetWidth;
+      masterCanvas.height = targetHeight;
+      masterCanvas.style.cssText = `
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: ${targetWidth}px !important;
+        height: ${targetHeight}px !important;
+        opacity: 0.001 !important;
+        pointer-events: none !important;
+        z-index: 999999 !important;
+      `;
+      document.body.appendChild(masterCanvas);
 
-      if (previewContainer && innerDiv) {
-        previewContainer.style.cssText = `
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
-          width: ${targetCssW}px !important;
-          height: ${targetCssH}px !important;
-          padding: 0 !important;
-          margin: 0 !important;
-          z-index: 99999 !important;
-          display: flex !important;
-          align-items: flex-start !important;
-          justify-content: flex-start !important;
-          background: #000 !important;
-        `;
-        innerDiv.style.cssText = `
-          width: ${targetCssW}px !important;
-          height: ${targetCssH}px !important;
-          max-width: none !important;
-          max-height: none !important;
-          border-radius: 0 !important;
-          border: none !important;
-        `;
-      } else {
-        // Fallback langsung ke canvas jika container tidak ditemukan
-        sourceCanvas.style.width = `${targetCssW}px`;
-        sourceCanvas.style.height = `${targetCssH}px`;
-      }
+      const masterCtx = masterCanvas.getContext('2d', { alpha: false, desynchronized: true });
+      masterCtx.imageSmoothingEnabled = true;
+      masterCtx.imageSmoothingQuality = 'high';
 
-      // Tunggu sampai canvas benar-benar mencapai resolusi target (polling)
-      let attempts = 0;
-      while (sourceCanvas.width !== targetWidth || sourceCanvas.height !== targetHeight) {
-        await new Promise(r => setTimeout(r, 100));
-        attempts++;
-        if (attempts > 20) {
-          console.warn(`Timeout waiting for canvas resize. Expected ${targetWidth}x${targetHeight}, got ${sourceCanvas.width}x${sourceCanvas.height}`);
-          break; // Lanjutkan saja jika sudah 2 detik
+      // Pastikan background hitam dasar
+      masterCtx.fillStyle = '#000000';
+      masterCtx.fillRect(0, 0, targetWidth, targetHeight);
+
+      // Loop rendering sinkron frame-by-frame
+      let isRenderingLoop = true;
+      const renderFrame = () => {
+        if (!isRenderingLoop) return;
+        if (sourceCanvas && masterCtx) {
+          masterCtx.drawImage(
+            sourceCanvas,
+            0, 0, sourceCanvas.width, sourceCanvas.height,
+            0, 0, targetWidth, targetHeight
+          );
+        }
+        animId = requestAnimationFrame(renderFrame);
+      };
+      renderFrame();
+
+      // Tunggu 300ms agar Master Canvas siap
+      await new Promise(r => setTimeout(r, 300));
+
+      // TANGKAP STREAM RESMI DARI MASTER CANVAS (1920x1080 / 3840x2160)
+      const stream = masterCanvas.captureStream(30);
+
+      // Pastikan Track Constraints terkunci mutlak
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        try {
+          await videoTracks[0].applyConstraints({
+            width: { exact: targetWidth },
+            height: { exact: targetHeight },
+            frameRate: { exact: 30 }
+          });
+        } catch (e) {
+          console.warn('Track constraint fallback:', e);
         }
       }
 
-      // Pastikan merender ulang sedikit
-      await new Promise(r => setTimeout(r, 500));
-
-      // TANGKAP STREAM LANGSUNG DARI SOURCE CANVAS
-      const stream = sourceCanvas.captureStream(30);
-
-      // Konfigurasi Codec Video
+      // Konfigurasi Codec Video (MP4 / WebM VP9)
       let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
@@ -182,13 +188,10 @@ export default function ExportModal({
       };
 
       mediaRecorder.onstop = () => {
-        // KEMBALIKAN STYLE SEPERTI SEMULA
-        if (previewContainer && innerDiv) {
-          previewContainer.style.cssText = origPreviewStyle;
-          innerDiv.style.cssText = origInnerStyle;
-        } else {
-          sourceCanvas.style.width = '100%';
-          sourceCanvas.style.height = '100%';
+        isRenderingLoop = false;
+        if (animId) cancelAnimationFrame(animId);
+        if (masterCanvas && masterCanvas.parentNode) {
+          masterCanvas.parentNode.removeChild(masterCanvas);
         }
 
         if (chunks.length === 0) {
@@ -200,21 +203,22 @@ export default function ExportModal({
 
         const blob = new Blob(chunks, { type: mimeType });
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-        console.log(`✅ Video recorded: ${sizeMB} MB (${sourceCanvas.width}x${sourceCanvas.height})`);
+        console.log(`✅ Video recorded: ${sizeMB} MB (${targetWidth}x${targetHeight})`);
         
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_${sourceCanvas.width}x${sourceCanvas.height}_${Date.now()}.${ext}`;
+        a.download = `motion_${targetResolution}_${targetWidth}x${targetHeight}_${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
         setRecordingProgress(0);
       };
 
-      mediaRecorder.start(200);
+      // Minta data chunk tiap 500ms
+      mediaRecorder.start(500);
 
-      // 10 Detik Penuh Rekaman + sedikit jeda di akhir = 10500 ms
+      // EXACT 10.5 DETIK
       const TARGET_TOTAL_MS = 10500;
       const startTime = performance.now();
 
@@ -233,14 +237,12 @@ export default function ExportModal({
 
     } catch (err) {
       console.error('Local record error:', err);
+      if (animId) cancelAnimationFrame(animId);
+      if (masterCanvas && masterCanvas.parentNode) {
+        masterCanvas.parentNode.removeChild(masterCanvas);
+      }
       alert('Gagal merekam: ' + err.message);
       setIsRecording(false);
-      
-      const previewContainer = document.querySelector('.canvas-viewport');
-      if (previewContainer) {
-        previewContainer.style.position = 'relative';
-        previewContainer.style.zIndex = '1';
-      }
     }
   };
 
@@ -270,7 +272,7 @@ export default function ExportModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileJson color="var(--primary)" size={26} />
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio (v1.0.6)</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio (v2.0 MASTER)</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                 Render video 16:9 murni FHD (1920x1080) / 4K (3840x2160)
               </p>
