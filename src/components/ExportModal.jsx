@@ -24,8 +24,8 @@ export default function ExportModal({
   if (!isOpen) return null;
 
   const resolutionConfig = targetResolution === '1080p' 
-    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 30000000 }
-    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: 60000000 };
+    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 40000000 }
+    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: 80000000 };
 
   // JSON Recipe Data
   const exportData = {
@@ -77,7 +77,7 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // DIRECT CONTAINER RESIZE: Paksa canvas merender TEPAT pada resolusi target
+  // HARD-ENFORCE RESOLUTION & EXACT 10s DURATION RENDER ENGINE
   const handleStartLocalRecord = async () => {
     try {
       setIsRecording(true);
@@ -85,70 +85,49 @@ export default function ExportModal({
 
       const targetWidth = resolutionConfig.width;
       const targetHeight = resolutionConfig.height;
-      const dpr = window.devicePixelRatio || 1;
 
-      // Hitung ukuran CSS container yang menghasilkan TEPAT targetWidth x targetHeight piksel canvas
-      const cssW = Math.round(targetWidth / dpr);
-      const cssH = Math.round(targetHeight / dpr);
-
-      // Temukan container preview dan paksa resize
-      const previewContainer = document.querySelector('.canvas-viewport');
-      const innerContainer = previewContainer ? previewContainer.querySelector('div') : null;
-
-      // Simpan style asli untuk dikembalikan nanti
-      const origPreviewStyle = previewContainer ? previewContainer.style.cssText : '';
-      const origInnerStyle = innerContainer ? innerContainer.style.cssText : '';
-
-      if (previewContainer) {
-        previewContainer.style.cssText = `
-          width: ${cssW}px !important;
-          height: ${cssH}px !important;
-          min-height: ${cssH}px !important;
-          max-width: ${cssW}px !important;
-          max-height: ${cssH}px !important;
-          padding: 0 !important;
-          display: flex;
-          position: relative;
-          overflow: hidden;
-        `;
-      }
-      if (innerContainer) {
-        innerContainer.style.cssText = `
-          width: ${cssW}px !important;
-          height: ${cssH}px !important;
-          max-width: ${cssW}px !important;
-          max-height: ${cssH}px !important;
-          border-radius: 0 !important;
-          border: none !important;
-          box-shadow: none !important;
-          position: relative;
-          display: flex;
-          overflow: hidden;
-        `;
-      }
-
-      // Tunggu canvas merender ulang pada ukuran baru (Paper Shaders menggunakan ResizeObserver)
-      await new Promise(r => setTimeout(r, 800));
-
-      // Ambil canvas yang sekarang sudah diresize ke resolusi target
+      // Cari elemen kanvas WebGL sumber yang aktif di layar
       const canvases = Array.from(document.querySelectorAll('canvas'));
-      const sourceCanvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
+      const sourceCanvas = canvases.find(c => c.width > 50 && c.height > 50) || canvases[0];
 
       if (!sourceCanvas) {
-        alert('Kanvas WebGL tidak ditemukan!');
-        // Kembalikan style
-        if (previewContainer) previewContainer.style.cssText = origPreviewStyle;
-        if (innerContainer) innerContainer.style.cssText = origInnerStyle;
+        alert('Kanvas WebGL tidak ditemukan di layar!');
         setIsRecording(false);
         return;
       }
 
-      console.log(`🎬 Recording Canvas: ${sourceCanvas.width}x${sourceCanvas.height} (target: ${targetWidth}x${targetHeight}, DPR: ${dpr}, CSS: ${cssW}x${cssH})`);
+      // BUAT MASTER OUTPUT CANVAS DENGAN RESOLUSI MUTLAK (1920x1080 atau 3840x2160)
+      const masterCanvas = document.createElement('canvas');
+      masterCanvas.width = targetWidth;
+      masterCanvas.height = targetHeight;
+      const masterCtx = masterCanvas.getContext('2d', { alpha: false, desynchronized: true });
 
-      // Tangkap stream langsung dari canvas WebGL (anti layar hitam, resolusi pasti!)
-      const stream = sourceCanvas.captureStream(30);
+      // Pastikan background hitam dasar jika transparan
+      masterCtx.fillStyle = '#000000';
+      masterCtx.fillRect(0, 0, targetWidth, targetHeight);
 
-      // Deteksi format video MP4 / WebM
+      // Loop penggambaran frame-by-frame terus menerus ke Master Canvas
+      let isRenderingLoop = true;
+      const renderLoop = () => {
+        if (!isRenderingLoop) return;
+        if (sourceCanvas && masterCtx) {
+          masterCtx.drawImage(
+            sourceCanvas,
+            0, 0, sourceCanvas.width, sourceCanvas.height,
+            0, 0, targetWidth, targetHeight
+          );
+        }
+        requestAnimationFrame(renderLoop);
+      };
+      renderLoop();
+
+      // Berikan jeda 200ms agar loop pertama sudah matang mengisi masterCanvas
+      await new Promise(r => setTimeout(r, 200));
+
+      // TANGKAP STREAM RESMI DARI MASTER CANVAS (DIJAMIN 100% 1920x1080 / 3840x2160)
+      const stream = masterCanvas.captureStream(30);
+
+      // Konfigurasi Codec Video & Bitrate Tinggi (Master Quality 40-80 Mbps)
       let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
@@ -177,9 +156,7 @@ export default function ExportModal({
       };
 
       mediaRecorder.onstop = () => {
-        // Kembalikan container ke ukuran semula
-        if (previewContainer) previewContainer.style.cssText = origPreviewStyle;
-        if (innerContainer) innerContainer.style.cssText = origInnerStyle;
+        isRenderingLoop = false;
 
         if (chunks.length === 0) {
           alert('Perekaman selesai tetapi buffer kosong.');
@@ -190,34 +167,37 @@ export default function ExportModal({
 
         const blob = new Blob(chunks, { type: mimeType });
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-        console.log(`✅ Video recorded: ${sizeMB} MB`);
+        console.log(`✅ Video recorded successfully: ${sizeMB} MB (${targetWidth}x${targetHeight})`);
+        
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_16x9_${Date.now()}.${ext}`;
+        a.download = `motion_${targetResolution}_${targetWidth}x${targetHeight}_${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
         setRecordingProgress(0);
       };
 
-      mediaRecorder.start(250);
+      // Minta data chunks secara stabil
+      mediaRecorder.start(200);
 
-      const totalDuration = 10;
-      let elapsedSeconds = 0;
+      // EXACT 10 SECONDS RECORD TIMER (Total 10.5 Detik untuk menjamin full 10s di pemutar video)
+      const TARGET_TOTAL_MS = 10500; // 10.5 detik penuh
+      const startTime = performance.now();
 
-      const progressTimer = setInterval(() => {
-        elapsedSeconds += 0.5;
-        const progress = Math.min(Math.round((elapsedSeconds / totalDuration) * 100), 100);
-        setRecordingProgress(progress);
+      const progressInterval = setInterval(() => {
+        const elapsed = performance.now() - startTime;
+        const pct = Math.min(Math.round((elapsed / TARGET_TOTAL_MS) * 100), 100);
+        setRecordingProgress(pct);
 
-        if (elapsedSeconds >= totalDuration) {
-          clearInterval(progressTimer);
+        if (elapsed >= TARGET_TOTAL_MS) {
+          clearInterval(progressInterval);
           if (mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
           }
         }
-      }, 500);
+      }, 100);
 
     } catch (err) {
       console.error('Local record error:', err);
@@ -254,7 +234,7 @@ export default function ExportModal({
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Export & Video Auto-Download Studio</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Render video 16:9 murni FHD ($1920\times 1080$) / 4K ($3840\times 2160$)
+                Render video 16:9 murni FHD (1920x1080) / 4K (3840x2160)
               </p>
             </div>
           </div>
@@ -318,7 +298,7 @@ export default function ExportModal({
               <div>
                 <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Render Langsung Menggunakan VGA Laptop</h4>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Mengunci resolusi tepat pada <strong>{resolutionConfig.label}</strong> dengan penyesuai piksel presisi tinggi sehingga hasil video tidak terpotong oleh ukuran layar.
+                  Mengunci resolusi tepat pada <strong>{resolutionConfig.label}</strong> dengan durasi loop 10 detik penuh dan bitrate tinggi.
                 </p>
               </div>
             </div>
@@ -329,10 +309,10 @@ export default function ExportModal({
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8' }}>
                     <Loader2 size={14} className="spin" /> Merekam Frame WebGL ({recordingProgress}%)...
                   </span>
-                  <span className="font-mono">10 Detik Seamless Loop</span>
+                  <span className="font-mono">10 Detik Penuh (300 Frame)</span>
                 </div>
                 <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.3s ease' }} />
+                  <div style={{ width: `${recordingProgress}%`, height: '100%', background: 'var(--primary-gradient)', transition: 'width 0.2s linear' }} />
                 </div>
               </div>
             ) : (
@@ -341,7 +321,7 @@ export default function ExportModal({
                 onClick={handleStartLocalRecord}
                 style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
               >
-                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (16:9 Pas)
+                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (16:9 Pas 10 Detik)
               </button>
             )}
           </div>
