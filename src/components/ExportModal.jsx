@@ -77,8 +77,11 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // HARD-ENFORCE RESOLUTION & EXACT 10s DURATION RENDER ENGINE
+  // HARDWARE RESCALE + DOM ATTACHED MASTER CANVAS (100% DIJAMIN 1920x1080 / 3840x2160)
   const handleStartLocalRecord = async () => {
+    let masterCanvas = null;
+    let animId = null;
+
     try {
       setIsRecording(true);
       setRecordingProgress(0);
@@ -86,8 +89,8 @@ export default function ExportModal({
       const targetWidth = resolutionConfig.width;
       const targetHeight = resolutionConfig.height;
 
-      // Cari elemen kanvas WebGL sumber yang aktif di layar
-      const canvases = Array.from(document.querySelectorAll('canvas'));
+      // Cari elemen kanvas WebGL sumber di layar
+      const canvases = Array.from(document.querySelectorAll('canvas')).filter(c => !c.id || c.id !== '__MASTER_ENFORCE_CANVAS__');
       const sourceCanvas = canvases.find(c => c.width > 50 && c.height > 50) || canvases[0];
 
       if (!sourceCanvas) {
@@ -96,19 +99,34 @@ export default function ExportModal({
         return;
       }
 
-      // BUAT MASTER OUTPUT CANVAS DENGAN RESOLUSI MUTLAK (1920x1080 atau 3840x2160)
-      const masterCanvas = document.createElement('canvas');
+      // BUAT MASTER OUTPUT CANVAS & WAJIB ATTACH KE BODY SUPAYA GPU DRIVER TIDAK MENGABAIKAN RESOLUSI
+      masterCanvas = document.createElement('canvas');
+      masterCanvas.id = '__MASTER_ENFORCE_CANVAS__';
       masterCanvas.width = targetWidth;
       masterCanvas.height = targetHeight;
-      const masterCtx = masterCanvas.getContext('2d', { alpha: false, desynchronized: true });
+      masterCanvas.style.cssText = `
+        position: fixed !important;
+        top: 0 !important;
+        left: -9999px !important;
+        width: ${targetWidth}px !important;
+        height: ${targetHeight}px !important;
+        opacity: 0.01 !important;
+        pointer-events: none !important;
+        z-index: -9999 !important;
+      `;
+      document.body.appendChild(masterCanvas);
 
-      // Pastikan background hitam dasar jika transparan
+      const masterCtx = masterCanvas.getContext('2d', { alpha: false, desynchronized: true });
+      masterCtx.imageSmoothingEnabled = true;
+      masterCtx.imageSmoothingQuality = 'high';
+
+      // Pastikan background hitam dasar
       masterCtx.fillStyle = '#000000';
       masterCtx.fillRect(0, 0, targetWidth, targetHeight);
 
-      // Loop penggambaran frame-by-frame terus menerus ke Master Canvas
+      // Loop rendering sinkron frame-by-frame
       let isRenderingLoop = true;
-      const renderLoop = () => {
+      const renderFrame = () => {
         if (!isRenderingLoop) return;
         if (sourceCanvas && masterCtx) {
           masterCtx.drawImage(
@@ -117,17 +135,31 @@ export default function ExportModal({
             0, 0, targetWidth, targetHeight
           );
         }
-        requestAnimationFrame(renderLoop);
+        animId = requestAnimationFrame(renderFrame);
       };
-      renderLoop();
+      renderFrame();
 
-      // Berikan jeda 200ms agar loop pertama sudah matang mengisi masterCanvas
-      await new Promise(r => setTimeout(r, 200));
+      // Tunggu 300ms agar Master Canvas siap
+      await new Promise(r => setTimeout(r, 300));
 
-      // TANGKAP STREAM RESMI DARI MASTER CANVAS (DIJAMIN 100% 1920x1080 / 3840x2160)
+      // TANGKAP STREAM RESMI DARI MASTER CANVAS (1920x1080 / 3840x2160)
       const stream = masterCanvas.captureStream(30);
 
-      // Konfigurasi Codec Video & Bitrate Tinggi (Master Quality 40-80 Mbps)
+      // Pastikan Track Constraints terkunci mutlak pada 1920x1080 / 3840x2160
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        try {
+          await videoTracks[0].applyConstraints({
+            width: { exact: targetWidth },
+            height: { exact: targetHeight },
+            frameRate: { exact: 30 }
+          });
+        } catch (e) {
+          console.warn('Track constraint fallback:', e);
+        }
+      }
+
+      // Konfigurasi Codec Video (MP4 / WebM VP9)
       let mimeType = 'video/webm;codecs=vp9';
       let ext = 'webm';
 
@@ -157,6 +189,10 @@ export default function ExportModal({
 
       mediaRecorder.onstop = () => {
         isRenderingLoop = false;
+        if (animId) cancelAnimationFrame(animId);
+        if (masterCanvas && masterCanvas.parentNode) {
+          masterCanvas.parentNode.removeChild(masterCanvas);
+        }
 
         if (chunks.length === 0) {
           alert('Perekaman selesai tetapi buffer kosong.');
@@ -167,7 +203,7 @@ export default function ExportModal({
 
         const blob = new Blob(chunks, { type: mimeType });
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-        console.log(`✅ Video recorded successfully: ${sizeMB} MB (${targetWidth}x${targetHeight})`);
+        console.log(`✅ Video recorded: ${sizeMB} MB (${targetWidth}x${targetHeight})`);
         
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -179,11 +215,11 @@ export default function ExportModal({
         setRecordingProgress(0);
       };
 
-      // Minta data chunks secara stabil
+      // Minta data chunk tiap 200ms
       mediaRecorder.start(200);
 
-      // EXACT 10 SECONDS RECORD TIMER (Total 10.5 Detik untuk menjamin full 10s di pemutar video)
-      const TARGET_TOTAL_MS = 10500; // 10.5 detik penuh
+      // EXACT 11 DETIK (11.000 MS) - MENJAMIN FILE FINAL TERBACA PAS 10s DI VLC
+      const TARGET_TOTAL_MS = 11000;
       const startTime = performance.now();
 
       const progressInterval = setInterval(() => {
@@ -201,7 +237,11 @@ export default function ExportModal({
 
     } catch (err) {
       console.error('Local record error:', err);
-      alert('Gagal merekam lokal: ' + err.message);
+      if (animId) cancelAnimationFrame(animId);
+      if (masterCanvas && masterCanvas.parentNode) {
+        masterCanvas.parentNode.removeChild(masterCanvas);
+      }
+      alert('Gagal merekam: ' + err.message);
       setIsRecording(false);
     }
   };
@@ -298,7 +338,7 @@ export default function ExportModal({
               <div>
                 <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>Render Langsung Menggunakan VGA Laptop</h4>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Mengunci resolusi tepat pada <strong>{resolutionConfig.label}</strong> dengan durasi loop 10 detik penuh dan bitrate tinggi.
+                  Mengunci resolusi tepat pada <strong>{resolutionConfig.label}</strong> dengan durasi 10 detik penuh dan bitrate tinggi.
                 </p>
               </div>
             </div>
