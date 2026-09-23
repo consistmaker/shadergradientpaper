@@ -58,13 +58,16 @@ server.listen(4173, '127.0.0.1', async () => {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Resolusi Dinamis (FHD 1080p / 4K UHD)
+    // Resolusi & High-Bitrate Profil (Adobe Stock / Shutterstock Broadcast Grade)
     const targetWidth = (recipe.metadata && recipe.metadata.resolutionWidth) || 1920;
     const targetHeight = (recipe.metadata && recipe.metadata.resolutionHeight) || 1080;
     const isFHD = targetWidth <= 1920;
     const resolutionName = isFHD ? 'Full HD (1080p)' : '4K UHD (2160p)';
-    const targetBitrate = isFHD ? '25M' : '40M';
-    const maxBitrate = isFHD ? '30M' : '50M';
+    
+    // Bitrate Ultra High: FHD = 50 Mbps (~60 MB), 4K = 90 Mbps (~110 MB)
+    const targetBitrate = isFHD ? '50M' : '90M';
+    const maxBitrate = isFHD ? '65M' : '110M';
+    const bufSize = isFHD ? '100M' : '180M';
 
     // Auto-detect Google Chrome di laptop Windows
     let chromePath = '';
@@ -87,7 +90,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
     console.log(`🚀 Using Browser Engine: ${chromePath}`);
     console.log(`🎬 Using FFmpeg Binary: ${ffmpegPath}`);
-    console.log(`🎯 Resolution Profile: ${resolutionName} (${targetWidth}x${targetHeight}) @ ${targetBitrate}`);
+    console.log(`🎯 Resolution Profile: ${resolutionName} (${targetWidth}x${targetHeight}) @ High Bitrate ${targetBitrate}`);
 
     const browser = await puppeteer.launch({
       executablePath: chromePath,
@@ -145,7 +148,7 @@ server.listen(4173, '127.0.0.1', async () => {
       const duration = (recipe.metadata && recipe.metadata.loopDurationSeconds) || 10;
       const totalFrames = fps * duration;
 
-      // Inisialisasi FFmpeg
+      // Inisialisasi FFmpeg dengan CRF 14 (Near-Lossless) dan Bitrate Tinggi
       const ffmpegArgs = [
         '-y',
         '-f', 'image2pipe',
@@ -155,17 +158,17 @@ server.listen(4173, '127.0.0.1', async () => {
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
-        '-crf', '16',
+        '-crf', '14',
         '-b:v', targetBitrate,
         '-maxrate', maxBitrate,
-        '-bufsize', '60M',
+        '-bufsize', bufSize,
         outputFile
       ];
 
       const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
       ffmpeg.stderr.on('data', () => {});
 
-      console.log(`   ⚡ Rendering & Encoding ${totalFrames} frames...`);
+      console.log(`   ⚡ Rendering & Encoding ${totalFrames} frames (Master Quality)...`);
 
       const frameDeltaMs = 1000 / fps;
 
@@ -181,7 +184,7 @@ server.listen(4173, '127.0.0.1', async () => {
 
           const canvas = document.querySelector('canvas');
           if (canvas) {
-            return canvas.toDataURL('image/jpeg', 0.92);
+            return canvas.toDataURL('image/jpeg', 0.98); // Kualitas JPEG kanvas 98% (Kaya Warna)
           }
           return null;
         }, vTime);
@@ -209,13 +212,13 @@ server.listen(4173, '127.0.0.1', async () => {
       
       const stats = fs.statSync(outputFile);
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-      console.log(`\n   ✅ Selesai Render: ${path.basename(outputFile)} (Ukuran: ${sizeInMB} MB)\n`);
+      console.log(`\n   ✅ Selesai Render: ${path.basename(outputFile)} (Ukuran: ${sizeInMB} MB | Master Quality)\n`);
     }
 
     await browser.close();
     server.close();
     console.log('========================================================================');
-    console.log('🎉 SEMUA VIDEO DALAM BATCH TELAH BERHASIL DIRENDER LENGKAP!');
+    console.log('🎉 SEMUA VIDEO MASTER QUALITY TELAH BERHASIL DIRENDER LENGKAP!');
     console.log(`📁 Lokasi Video: ${outputDir}`);
     console.log('========================================================================');
     process.exit(0);
