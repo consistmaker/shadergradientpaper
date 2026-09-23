@@ -77,63 +77,76 @@ export default function ExportModal({
     URL.revokeObjectURL(url);
   };
 
-  // VIDEO ELEMENT BRIDGE: Tangkap WebGL stream (anti hitam) → Video Element → Canvas 1920x1080 PASTI
+  // DIRECT CONTAINER RESIZE: Paksa canvas merender TEPAT pada resolusi target
   const handleStartLocalRecord = async () => {
     try {
-      const canvases = Array.from(document.querySelectorAll('canvas'));
-      const sourceCanvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
-
-      if (!sourceCanvas) {
-        alert('Kanvas WebGL tidak ditemukan di layar!');
-        return;
-      }
-
       setIsRecording(true);
       setRecordingProgress(0);
 
       const targetWidth = resolutionConfig.width;
       const targetHeight = resolutionConfig.height;
+      const dpr = window.devicePixelRatio || 1;
 
-      // LANGKAH 1: Tangkap stream langsung dari WebGL canvas (anti layar hitam)
-      const webglStream = sourceCanvas.captureStream(30);
+      // Hitung ukuran CSS container yang menghasilkan TEPAT targetWidth x targetHeight piksel canvas
+      const cssW = Math.round(targetWidth / dpr);
+      const cssH = Math.round(targetHeight / dpr);
 
-      // LANGKAH 2: Buat elemen <video> tersembunyi yang memainkan stream WebGL
-      const videoEl = document.createElement('video');
-      videoEl.srcObject = webglStream;
-      videoEl.muted = true;
-      videoEl.playsInline = true;
-      videoEl.style.position = 'fixed';
-      videoEl.style.top = '-9999px';
-      videoEl.style.left = '-9999px';
-      videoEl.style.width = '1px';
-      videoEl.style.height = '1px';
-      videoEl.style.opacity = '0';
-      videoEl.style.pointerEvents = 'none';
-      document.body.appendChild(videoEl);
-      await videoEl.play();
+      // Temukan container preview dan paksa resize
+      const previewContainer = document.querySelector('.canvas-viewport');
+      const innerContainer = previewContainer ? previewContainer.querySelector('div') : null;
 
-      // LANGKAH 3: Buat canvas output dengan dimensi PASTI 1920x1080 atau 3840x2160
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = targetWidth;
-      exportCanvas.height = targetHeight;
-      const ctx = exportCanvas.getContext('2d', { alpha: false });
+      // Simpan style asli untuk dikembalikan nanti
+      const origPreviewStyle = previewContainer ? previewContainer.style.cssText : '';
+      const origInnerStyle = innerContainer ? innerContainer.style.cssText : '';
 
-      // LANGKAH 4: Loop gambar ulang video → canvas berukuran pasti
-      let isDrawing = true;
-      const drawLoop = () => {
-        if (!isDrawing) return;
-        if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA && ctx) {
-          ctx.drawImage(videoEl, 0, 0, targetWidth, targetHeight);
-        }
-        requestAnimationFrame(drawLoop);
-      };
-      drawLoop();
+      if (previewContainer) {
+        previewContainer.style.cssText = `
+          width: ${cssW}px !important;
+          height: ${cssH}px !important;
+          min-height: ${cssH}px !important;
+          max-width: ${cssW}px !important;
+          max-height: ${cssH}px !important;
+          padding: 0 !important;
+          display: flex;
+          position: relative;
+          overflow: hidden;
+        `;
+      }
+      if (innerContainer) {
+        innerContainer.style.cssText = `
+          width: ${cssW}px !important;
+          height: ${cssH}px !important;
+          max-width: ${cssW}px !important;
+          max-height: ${cssH}px !important;
+          border-radius: 0 !important;
+          border: none !important;
+          box-shadow: none !important;
+          position: relative;
+          display: flex;
+          overflow: hidden;
+        `;
+      }
 
-      // Tunggu 100ms agar video element sudah mulai render frame pertama
-      await new Promise(r => setTimeout(r, 100));
+      // Tunggu canvas merender ulang pada ukuran baru (Paper Shaders menggunakan ResizeObserver)
+      await new Promise(r => setTimeout(r, 800));
 
-      // LANGKAH 5: Tangkap stream dari exportCanvas yang berukuran TEPAT
-      const exportStream = exportCanvas.captureStream(30);
+      // Ambil canvas yang sekarang sudah diresize ke resolusi target
+      const canvases = Array.from(document.querySelectorAll('canvas'));
+      const sourceCanvas = canvases.find(c => c.width > 100 && c.height > 100) || canvases[0];
+
+      if (!sourceCanvas) {
+        alert('Kanvas WebGL tidak ditemukan!');
+        // Kembalikan style
+        if (previewContainer) previewContainer.style.cssText = origPreviewStyle;
+        if (innerContainer) innerContainer.style.cssText = origInnerStyle;
+        setIsRecording(false);
+        return;
+      }
+
+      console.log(`🎬 Recording Canvas: ${sourceCanvas.width}x${sourceCanvas.height} (target: ${targetWidth}x${targetHeight}, DPR: ${dpr}, CSS: ${cssW}x${cssH})`);
+
+      // Tangkap stream langsung dari canvas WebGL (anti layar hitam, resolusi pasti!)
+      const stream = sourceCanvas.captureStream(30);
 
       // Deteksi format video MP4 / WebM
       let mimeType = 'video/webm;codecs=vp9';
@@ -153,7 +166,7 @@ export default function ExportModal({
         ext = 'webm';
       }
 
-      const mediaRecorder = new MediaRecorder(exportStream, {
+      const mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
         videoBitsPerSecond: resolutionConfig.bitrate
       });
@@ -164,11 +177,9 @@ export default function ExportModal({
       };
 
       mediaRecorder.onstop = () => {
-        isDrawing = false;
-        // Bersihkan elemen video tersembunyi
-        videoEl.pause();
-        videoEl.srcObject = null;
-        if (videoEl.parentNode) videoEl.parentNode.removeChild(videoEl);
+        // Kembalikan container ke ukuran semula
+        if (previewContainer) previewContainer.style.cssText = origPreviewStyle;
+        if (innerContainer) innerContainer.style.cssText = origInnerStyle;
 
         if (chunks.length === 0) {
           alert('Perekaman selesai tetapi buffer kosong.');
@@ -178,6 +189,8 @@ export default function ExportModal({
         }
 
         const blob = new Blob(chunks, { type: mimeType });
+        const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+        console.log(`✅ Video recorded: ${sizeMB} MB`);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

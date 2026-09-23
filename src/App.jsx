@@ -150,12 +150,12 @@ export default function App() {
   const getAspectStyle = () => {
     switch (aspectRatio) {
       case '9-16':
-        return { width: '320px', height: '568px', maxWidth: '100%', maxHeight: '100%' };
+        return { aspectRatio: '9/16', width: 'auto', height: '100%', maxHeight: 'calc(100vh - 120px)' };
       case '1-1':
-        return { width: '340px', height: '340px', maxWidth: '100%', maxHeight: '100%' };
+        return { aspectRatio: '1/1', width: 'auto', height: '100%', maxHeight: 'calc(100vh - 120px)' };
       case '16-9':
       default:
-        return { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' };
+        return { aspectRatio: '16/9', width: '100%', height: 'auto', maxWidth: 'calc((100vh - 120px) * 16 / 9)', maxHeight: 'calc(100vh - 120px)' };
     }
   };
 
