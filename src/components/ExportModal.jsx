@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2, Monitor } from 'lucide-react';
+import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2, Monitor, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { addRenderRecord, checkDuplicate } from '../utils/deduplication';
 
 export default function ExportModal({
   isOpen,
@@ -21,7 +22,12 @@ export default function ExportModal({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingProgress, setRecordingProgress] = useState(0);
 
+  const [forceDuplicateRender, setForceDuplicateRender] = useState(false);
+
   if (!isOpen) return null;
+
+  const currentConfig = activeEngine === 'paper' ? paperConfig : shaderGradientConfig;
+  const duplicateStatus = checkDuplicate(activeEngine, currentConfig);
 
   const resolutionConfig = targetResolution === '1080p' 
     ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 30000000 }
@@ -203,12 +209,36 @@ export default function ExportModal({
 
         const blob = new Blob(chunks, { type: mimeType });
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+        const fileName = `motion_${targetResolution}_${targetWidth}x${targetHeight}_${Date.now()}.${ext}`;
         console.log(`✅ Video recorded: ${sizeMB} MB (${targetWidth}x${targetHeight})`);
         
+        // PENCATATAN OTOMATIS KE RENDER VAULT (ANTI DUPLIKAT 100%)
+        try {
+          const cfg = activeEngine === 'paper' ? paperConfig : shaderGradientConfig;
+          const colors = activeEngine === 'paper'
+            ? [cfg.color1, cfg.color2, cfg.color3, cfg.color4].filter(Boolean)
+            : [cfg.color1, cfg.color2, cfg.color3].filter(Boolean);
+
+          addRenderRecord({
+            fingerprint: duplicateStatus.fingerprint,
+            engine: activeEngine,
+            name: activeEngine === 'paper'
+              ? `Paper: ${cfg.shaderType}`
+              : `ShaderGradient: ${cfg.type || 'sphere'} (${cfg.activePresetId || 'custom'})`,
+            fileName: fileName,
+            resolution: `${targetWidth}x${targetHeight} (${targetResolution.toUpperCase()})`,
+            colors: colors,
+            shaderType: activeEngine === 'paper' ? cfg.shaderType : cfg.type,
+            configSummary: { ...cfg }
+          });
+        } catch (e) {
+          console.error('Failed to log render history:', e);
+        }
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `motion_${targetResolution}_${targetWidth}x${targetHeight}_${Date.now()}.${ext}`;
+        a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
         setIsRecording(false);
@@ -343,6 +373,52 @@ export default function ExportModal({
               </div>
             </div>
 
+            {/* WARNING JIKA DUPLIKAT 100% TERDETEKSI */}
+            {duplicateStatus.isDuplicate && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f87171', fontWeight: '700', fontSize: '0.8rem' }}>
+                  <AlertTriangle size={16} /> PERINGATAN: ASET INI SUDAH PERNAH DIRENDER! (DUPLIKAT 100%)
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#fca5a5' }}>
+                  Konfigurasi warna dan shader ini persis sama dengan file <strong>"{duplicateStatus.matchedRecord?.fileName}"</strong> yang dirender pada <em>{duplicateStatus.matchedRecord?.formattedDate}</em>.
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                  <label style={{ fontSize: '0.7rem', color: '#fecaca', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={forceDuplicateRender}
+                      onChange={(e) => setForceDuplicateRender(e.target.checked)}
+                    />
+                    Saya sadar ini duplikat, tetap izinkan render ulang
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {!duplicateStatus.isDuplicate && (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '6px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.72rem',
+                color: '#34d399'
+              }}>
+                <ShieldCheck size={14} /> 100% UNIK: Belum pernah dirender sebelumnya di database vault Anda.
+              </div>
+            )}
+
             {isRecording ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
@@ -359,9 +435,22 @@ export default function ExportModal({
               <button
                 className="glass-btn primary"
                 onClick={handleStartLocalRecord}
-                style={{ justifyContent: 'center', padding: '12px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+                disabled={duplicateStatus.isDuplicate && !forceDuplicateRender}
+                style={{
+                  justifyContent: 'center',
+                  padding: '12px',
+                  fontSize: '0.85rem',
+                  background: duplicateStatus.isDuplicate && !forceDuplicateRender 
+                    ? 'rgba(255,255,255,0.1)' 
+                    : 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  opacity: duplicateStatus.isDuplicate && !forceDuplicateRender ? 0.5 : 1,
+                  cursor: duplicateStatus.isDuplicate && !forceDuplicateRender ? 'not-allowed' : 'pointer'
+                }}
               >
-                <Download size={18} /> Render & Download Video {targetResolution.toUpperCase()} (16:9 Pas 10 Detik)
+                <Download size={18} /> {duplicateStatus.isDuplicate && !forceDuplicateRender 
+                  ? 'Terkunci (Duplikat Terdeteksi)' 
+                  : `Render & Download Video ${targetResolution.toUpperCase()} (16:9 Pas 10 Detik)`}
               </button>
             )}
           </div>

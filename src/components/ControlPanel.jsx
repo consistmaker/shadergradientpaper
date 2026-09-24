@@ -12,7 +12,9 @@ import {
   Lock,
   Unlock,
   Sliders,
-  ListPlus
+  ListPlus,
+  AlertTriangle,
+  History
 } from 'lucide-react';
 import {
   COLOR_PALETTES,
@@ -32,7 +34,10 @@ export default function ControlPanel({
   lockedParams,
   setLockedParams,
   onAddToQueue,
-  queueCount
+  queueCount,
+  duplicateStatus = { isDuplicate: false },
+  onOpenHistory,
+  historyCount = 0
 }) {
   const [shaderGradientTab, setShaderGradientTab] = useState('shape'); // 'shape' | 'colors' | 'motion' | 'view'
   const [paperTab, setPaperTab] = useState('params'); // 'params' | 'sizing' | 'colors'
@@ -145,6 +150,78 @@ export default function ControlPanel({
             <FileJson size={16} /> Export Batch
           </button>
         </div>
+
+        {/* Vault History & Anti-Duplicate Live Status */}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
+          <button
+            className="glass-btn"
+            onClick={onOpenHistory}
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+              fontSize: '0.74rem',
+              padding: '7px 10px',
+              gap: '6px',
+              background: 'rgba(255,255,255,0.04)'
+            }}
+            title="Buka brankas riwayat aset yang sudah pernah dirender"
+          >
+            <History size={14} color="var(--primary)" />
+            <span>Render Vault Log</span>
+            <span className="badge" style={{ background: 'rgba(255,255,255,0.1)', fontSize: '0.65rem', padding: '1px 5px' }}>
+              {historyCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Real-time Anti-Duplicate Warning Banner */}
+        {duplicateStatus.isDuplicate ? (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            borderRadius: 'var(--radius-md)',
+            padding: '8px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171', fontSize: '0.74rem', fontWeight: '700' }}>
+              <AlertTriangle size={15} /> ⚠️ DUPLIKAT 100% TERDETEKSI!
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#fca5a5', lineHeight: 1.3 }}>
+              Setting ini sudah pernah dirender sebagai <strong>"{duplicateStatus.matchedRecord?.fileName}"</strong> ({duplicateStatus.matchedRecord?.formattedDate}).
+            </div>
+            <button
+              className="glass-btn"
+              onClick={onRandomize}
+              style={{
+                marginTop: '4px',
+                padding: '4px 8px',
+                fontSize: '0.68rem',
+                justifyContent: 'center',
+                background: 'rgba(239, 68, 68, 0.25)',
+                color: '#fee2e2',
+                border: '1px solid rgba(239, 68, 68, 0.4)'
+              }}
+            >
+              <RefreshCw size={12} /> Acak Ulang Agar 100% Unik
+            </button>
+          </div>
+        ) : (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.08)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '6px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '0.7rem',
+            color: '#34d399'
+          }}>
+            <ShieldCheck size={14} /> <span>Status: <strong>100% Unik</strong> (Aman untuk Microstock)</span>
+          </div>
+        )}
       </div>
 
       {/* Lock & Safe Range Controller Banner */}

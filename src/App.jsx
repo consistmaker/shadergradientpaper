@@ -3,6 +3,7 @@ import ControlPanel from './components/ControlPanel';
 import ShaderGradientPreview from './components/ShaderGradientPreview';
 import PaperShaderPreview from './components/PaperShaderPreview';
 import ExportModal from './components/ExportModal';
+import HistoryModal from './components/HistoryModal';
 import {
   DEFAULT_PAPER_CONFIG,
   DEFAULT_SHADERGRADIENT_CONFIG,
@@ -10,14 +11,17 @@ import {
   SHADERGRADIENT_PRESETS,
   PAPER_SHADER_SPECIFIC_PRESETS
 } from './constants';
-import { Sparkles, Layers, Sliders, Smartphone, Monitor, Square, ListPlus, Trash2 } from 'lucide-react';
+import { Sparkles, Layers, Sliders, Smartphone, Monitor, Square, ListPlus, Trash2, History, AlertTriangle } from 'lucide-react';
+import { getRenderHistory, checkDuplicate } from './utils/deduplication';
 
 export default function App() {
   const [activeEngine, setActiveEngine] = useState('paper'); // 'paper' | 'shadergradient'
   const [paperConfig, setPaperConfig] = useState(DEFAULT_PAPER_CONFIG);
   const [shaderGradientConfig, setShaderGradientConfig] = useState(DEFAULT_SHADERGRADIENT_CONFIG);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('16-9'); // '16-9' | '9-16' | '1-1'
+  const [renderHistory, setRenderHistory] = useState([]);
   
   // Custom Manual Batch Queue
   const [renderQueue, setRenderQueue] = useState([]);
@@ -58,10 +62,20 @@ export default function App() {
         setShaderGradientConfig(prev => ({ ...prev, ...config }));
       }
     };
+
+    // Muat riwayat render dari localStorage
+    setRenderHistory(getRenderHistory());
   }, []);
+
+  const refreshHistory = () => {
+    setRenderHistory(getRenderHistory());
+  };
 
   const activeConfig = activeEngine === 'paper' ? paperConfig : shaderGradientConfig;
   const setConfig = activeEngine === 'paper' ? setPaperConfig : setShaderGradientConfig;
+
+  // Real-time duplicate check against Vault history
+  const duplicateStatus = checkDuplicate(activeEngine, activeConfig, renderHistory);
 
   // Add Current Setting to Manual Batch Queue
   const handleAddToQueue = () => {
@@ -197,6 +211,24 @@ export default function App() {
               <ListPlus size={13} /> + Antrean ({renderQueue.length})
             </button>
 
+            {/* Render Vault Button */}
+            <button
+              className="glass-btn"
+              onClick={() => setIsHistoryOpen(true)}
+              style={{
+                padding: '5px 8px',
+                fontSize: '0.7rem',
+                gap: '4px',
+                background: duplicateStatus.isDuplicate ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.05)',
+                borderColor: duplicateStatus.isDuplicate ? '#ef4444' : 'var(--border-color)',
+                color: duplicateStatus.isDuplicate ? '#fca5a5' : 'inherit'
+              }}
+              title="Buka Brankas Catatan Render & Deteksi Duplikat"
+            >
+              {duplicateStatus.isDuplicate ? <AlertTriangle size={13} color="#f87171" /> : <History size={13} color="var(--primary)" />}
+              <span>Vault ({renderHistory.length})</span>
+            </button>
+
             {/* Aspect Ratio Switcher */}
             <div style={{ display: 'flex', background: 'rgba(0,0,0,0.4)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
               <button
@@ -275,13 +307,19 @@ export default function App() {
           setLockedParams={setLockedParams}
           onAddToQueue={handleAddToQueue}
           queueCount={renderQueue.length}
+          duplicateStatus={duplicateStatus}
+          onOpenHistory={() => setIsHistoryOpen(true)}
+          historyCount={renderHistory.length}
         />
       </div>
 
       {/* Export Recipe Modal */}
       <ExportModal
         isOpen={isExportOpen}
-        onClose={() => setIsExportOpen(false)}
+        onClose={() => {
+          setIsExportOpen(false);
+          refreshHistory();
+        }}
         activeEngine={activeEngine}
         paperConfig={paperConfig}
         shaderGradientConfig={shaderGradientConfig}
@@ -290,6 +328,14 @@ export default function App() {
         renderQueue={renderQueue}
         onClearQueue={handleClearQueue}
         onRemoveFromQueue={handleRemoveFromQueue}
+      />
+
+      {/* Render History & Anti-Duplicate Vault Modal */}
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={renderHistory}
+        onRefreshHistory={refreshHistory}
       />
     </div>
   );
