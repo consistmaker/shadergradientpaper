@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2, Monitor, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Copy, Check, FileJson, X, Download, ListOrdered, Sparkles, Video, Cpu, Cloud, Loader2, Monitor, AlertTriangle, ShieldCheck, Gauge, Sliders } from 'lucide-react';
 import { addRenderRecord, checkDuplicate } from '../utils/deduplication';
 
 export default function ExportModal({
@@ -17,6 +17,7 @@ export default function ExportModal({
   const [copied, setCopied] = useState(false);
   const [exportTarget, setExportTarget] = useState('local_record'); // 'local_record' | 'colab_batch'
   const [targetResolution, setTargetResolution] = useState('1080p'); // '1080p' | '4k'
+  const [qualityProfile, setQualityProfile] = useState('master'); // 'standard' (35M) | 'master' (65M) | 'ultra' (90M)
   const [exportMode, setExportMode] = useState(renderQueue.length > 0 ? 'queue' : 'auto_matrix');
   const [batchCount, setBatchCount] = useState(10);
   const [isRecording, setIsRecording] = useState(false);
@@ -29,9 +30,25 @@ export default function ExportModal({
   const currentConfig = activeEngine === 'paper' ? paperConfig : shaderGradientConfig;
   const duplicateStatus = checkDuplicate(activeEngine, currentConfig);
 
+  // High Bitrate Profiles untuk menghasilkan file 15 - 35MB (Microstock Master Quality)
+  const BITRATE_MAP = {
+    '1080p': {
+      standard: { bitrate: 35000000, desc: '35 Mbps (~12-18 MB)', label: 'Standard High' },
+      master: { bitrate: 65000000, desc: '65 Mbps (~20-30 MB) ★ Rekomendasi', label: 'Master Stock' },
+      ultra: { bitrate: 90000000, desc: '90 Mbps (~30-45 MB)', label: 'Ultra Heavy' }
+    },
+    '4k': {
+      standard: { bitrate: 60000000, desc: '60 Mbps (~25-35 MB)', label: 'Standard 4K' },
+      master: { bitrate: 95000000, desc: '95 Mbps (~35-50 MB) ★ Rekomendasi', label: 'Master 4K' },
+      ultra: { bitrate: 130000000, desc: '130 Mbps (~50-80 MB)', label: 'Ultra 4K' }
+    }
+  };
+
+  const currentBitrateSetting = BITRATE_MAP[targetResolution][qualityProfile] || BITRATE_MAP[targetResolution]['master'];
+
   const resolutionConfig = targetResolution === '1080p' 
-    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: 30000000 }
-    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: 60000000 };
+    ? { width: 1920, height: 1080, label: "1920x1080 (Full HD 16:9)", bitrate: currentBitrateSetting.bitrate }
+    : { width: 3840, height: 2160, label: "3840x2160 (4K UHD 16:9)", bitrate: currentBitrateSetting.bitrate };
 
   // JSON Recipe Data
   const exportData = {
@@ -340,6 +357,53 @@ export default function ExportModal({
               <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Pasti 3840x2160 Piksel</span>
             </button>
           </div>
+
+          {/* Quality Profile / Bitrate Selector */}
+          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', color: '#c7d2fe' }}>
+                <Gauge size={13} color="#818cf8" /> Kualitas Bitrate / Target File Size:
+              </span>
+              <span style={{ fontSize: '0.68rem', color: '#38bdf8', fontWeight: '700' }}>
+                {currentBitrateSetting.desc}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr', gap: '6px' }}>
+              <button
+                onClick={() => setQualityProfile('standard')}
+                className={`glass-btn ${qualityProfile === 'standard' ? 'active' : ''}`}
+                style={{ padding: '6px 4px', fontSize: '0.68rem', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}
+              >
+                <span style={{ fontWeight: '600' }}>Standard</span>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)' }}>~12-18 MB</span>
+              </button>
+              <button
+                onClick={() => setQualityProfile('master')}
+                className={`glass-btn ${qualityProfile === 'master' ? 'active' : ''}`}
+                style={{
+                  padding: '6px 4px',
+                  fontSize: '0.68rem',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  justifyContent: 'center',
+                  borderColor: qualityProfile === 'master' ? '#10b981' : 'var(--border-color)',
+                  background: qualityProfile === 'master' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.02)'
+                }}
+              >
+                <span style={{ fontWeight: '700', color: qualityProfile === 'master' ? '#34d399' : '#fff' }}>Master Stock ★</span>
+                <span style={{ fontSize: '0.6rem', color: qualityProfile === 'master' ? '#a7f3d0' : 'var(--text-dim)' }}>20 - 30 MB</span>
+              </button>
+              <button
+                onClick={() => setQualityProfile('ultra')}
+                className={`glass-btn ${qualityProfile === 'ultra' ? 'active' : ''}`}
+                style={{ padding: '6px 4px', fontSize: '0.68rem', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}
+              >
+                <span style={{ fontWeight: '600' }}>Ultra Heavy</span>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)' }}>30 - 45+ MB</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Target Selector */}
@@ -450,7 +514,7 @@ export default function ExportModal({
               >
                 <Download size={18} /> {duplicateStatus.isDuplicate && !forceDuplicateRender 
                   ? 'Terkunci (Duplikat Terdeteksi)' 
-                  : `Render & Download Video ${targetResolution.toUpperCase()} (16:9 Pas 10 Detik)`}
+                  : `Render & Download Video ${targetResolution.toUpperCase()} [${currentBitrateSetting.label} ~${qualityProfile === 'master' ? '20-30MB' : qualityProfile === 'ultra' ? '30-45MB' : '15MB'}]`}
               </button>
             )}
           </div>
